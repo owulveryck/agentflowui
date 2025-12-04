@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0E2356">
+    <title>AgentFlow - AI Chat Interface</title>
+
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <!-- Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Mermaid for diagrams -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="./static/css/styles.css">
+
+    <!-- Configuration -->
+    <script>
+        // API server running on localhost:4000
+        window.AGENTFLOW_BASE_URL = 'http://localhost:4000';
+    </script>
+</head>
+<body>
+    <!-- Main Container -->
+    <div class="app-container">
+        <!-- Side Menu -->
+        <aside id="side-menu" class="side-menu">
+            <div class="menu-header">
+                <h2>AgentFlow</h2>
+            </div>
+
+            <!-- System Prompt Section -->
+            <div class="menu-section">
+                <h3>System Prompt</h3>
+                <textarea id="system-prompt" rows="4" placeholder="Enter system prompt..."></textarea>
+            </div>
+
+            <!-- Export/Import Section -->
+            <div class="menu-section">
+                <h3>Backup & Restore</h3>
+                <div class="btn-group">
+                    <button id="export-btn" class="btn btn-secondary">
+                        <span class="material-icons">file_download</span>
+                        Export
+                    </button>
+                    <button id="import-btn" class="btn btn-secondary">
+                        <span class="material-icons">file_upload</span>
+                        Import
+                    </button>
+                </div>
+                <input type="file" id="import-input" accept=".json,.md,.txt" style="display: none;">
+            </div>
+
+            <!-- Google Drive Sync Section -->
+            <div class="menu-section">
+                <h3>Google Drive</h3>
+                <div id="gdrive-status" class="sync-status clickable">
+                    <span class="status-indicator" id="sync-indicator"></span>
+                    <span class="status-text" id="sync-status-text">Click to connect</span>
+                    <span class="material-icons sync-action-icon" id="sync-action-icon">cloud_upload</span>
+                </div>
+            </div>
+
+            <!-- Conversations List -->
+            <div class="menu-section">
+                <h3>Conversations</h3>
+                <div id="conversations-list" class="conversations-list"></div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="chat-header">
+                <button id="menu-toggle" class="icon-btn">
+                    <span class="material-icons">menu</span>
+                </button>
+
+                <button id="new-chat-btn" class="btn btn-primary">
+                    <span class="material-icons">add</span>
+                    New Chat
+                </button>
+
+                <div class="header-controls">
+                    <!-- Model Selection -->
+                    <div class="dropdown-container">
+                        <button id="model-btn" class="btn btn-outline">
+                            <span class="material-icons">smart_toy</span>
+                            <span>Model</span>
+                            <span class="material-icons">arrow_drop_down</span>
+                        </button>
+                        <div id="model-dropdown" class="dropdown hidden">
+                            <div id="model-list" class="dropdown-list">
+                                <div class="dropdown-item selected" data-model="gemini-2.0-flash">
+                                    Gemini 2.0 Flash
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Source Selection -->
+                    <div class="dropdown-container">
+                        <button id="audio-source-btn" class="btn btn-outline">
+                            <span class="material-icons">mic</span>
+                            <span>Microphone</span>
+                            <span class="material-icons">arrow_drop_down</span>
+                        </button>
+                        <div id="audio-source-dropdown" class="dropdown hidden">
+                            <div class="dropdown-list">
+                                <div class="dropdown-item audio-source-option selected" data-source="microphone">
+                                    <span class="material-icons">mic</span>
+                                    <span>Microphone Only</span>
+                                </div>
+                                <div class="dropdown-item audio-source-option" data-source="system">
+                                    <span class="material-icons">desktop_windows</span>
+                                    <span>System Audio</span>
+                                </div>
+                                <div class="dropdown-item audio-source-option" data-source="mixed">
+                                    <span class="material-icons">settings_voice</span>
+                                    <span>Mic + System</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="chat-messages"></div>
+
+            <!-- Recording Indicator -->
+            <div id="recording-indicator" class="recording-indicator hidden">
+                <div class="recording-animation">
+                    <span class="recording-dot"></span>
+                </div>
+                <span id="recording-timer">00:00</span>
+            </div>
+
+            <!-- File Preview -->
+            <div id="file-preview" class="file-preview"></div>
+
+            <!-- Input Area -->
+            <div class="input-container">
+                <div class="input-row">
+                    <!-- Recording Controls -->
+                    <button id="record-btn" class="icon-btn" title="Start Recording">
+                        <span class="material-icons">mic</span>
+                    </button>
+                    <button id="stop-record-btn" class="icon-btn hidden" title="Stop Recording">
+                        <span class="material-icons">stop</span>
+                    </button>
+                    <button id="segment-btn" class="icon-btn hidden" title="Create Segment">
+                        <span class="material-icons">fiber_manual_record</span>
+                    </button>
+
+                    <!-- File Attachment -->
+                    <button id="attach-btn" class="icon-btn" title="Attach File">
+                        <span class="material-icons">attach_file</span>
+                    </button>
+                    <input type="file" id="file-input" accept="image/*,application/pdf,audio/*" multiple style="display: none;">
+
+                    <!-- Text Input -->
+                    <textarea
+                        id="user-input"
+                        placeholder="Type your message..."
+                        rows="1"
+                    ></textarea>
+
+                    <!-- Send/Stop Buttons -->
+                    <button id="send-btn" class="btn btn-primary">
+                        <span class="material-icons">send</span>
+                    </button>
+                    <button id="stop-btn" class="btn btn-danger hidden">
+                        <span class="material-icons">stop</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="./static/js/config.js"></script>
+    <script src="./static/js/googleDriveAuth.js"></script>
+    <script src="./static/js/googleDriveStorage.js"></script>
+    <script src="./static/js/storageManager.js"></script>
+    <script src="./static/js/workerManager.js"></script>
+    <script src="./static/js/chat.js"></script>
+</body>
+</html>

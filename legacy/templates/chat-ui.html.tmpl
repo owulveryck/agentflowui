@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AgentFlow">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>AgentFlow - Agentic System Chat</title>
+    <link rel="icon" type="image/png" href="{{.BaseURL}}/static/images/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="{{.BaseURL}}/static/images/favicon.svg" />
+    <link rel="shortcut icon" href="{{.BaseURL}}/static/images/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="{{.BaseURL}}/static/images/apple-touch-icon.png" />
+    <link rel="manifest" href="{{.BaseURL}}/static/site.webmanifest" />
+    <link rel="stylesheet" href="{{.BaseURL}}/static/css/styles.css">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    <!-- Mermaid.js for diagram rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <!-- Inject baseURL as global JavaScript variable -->
+    <script>
+        window.AGENTFLOW_BASE_URL = '{{.APIURL}}';
+    </script>
+</head>
+<body>
+    <!-- Tool Event Popup Container -->
+    <div class="tool-popup-container" id="toolPopupContainer"></div>
+
+    <!-- Copy Selection Button -->
+    <button class="copy-selection-button" id="copySelectionButton">
+        <span class="material-icons" style="font-size: 16px; margin-right: 4px;">content_copy</span>
+        Copy
+    </button>
+
+    <!-- Side Menu -->
+    <div class="side-menu" id="sideMenu">
+        <div class="side-menu-header">
+            <h2>Conversations</h2>
+            <button class="new-chat-btn" id="newChatBtn">
+                <span class="material-icons">add</span>
+                New chat
+            </button>
+        </div>
+        <div class="system-prompt-section">
+            <div class="system-prompt-label">
+                <span class="material-icons">layers</span>
+                System Prompt
+            </div>
+            <textarea
+                id="systemPromptTextarea"
+                class="system-prompt-textarea"
+                placeholder="Enter system prompt (default: You are a helpful assistant with current time)"
+            >You are a helpful assistant.
+Current time is {{`{{now | formatTimeInLocation "Europe/Paris" "2006-01-02 15:04"}}`}}</textarea>
+            <div class="system-prompt-actions">
+                <button id="systemPromptSave" class="system-prompt-btn system-prompt-save">Save</button>
+                <button id="systemPromptReset" class="system-prompt-btn system-prompt-reset">Reset</button>
+                <button id="cleanupStorage" class="system-prompt-btn system-prompt-reset" title="Clear old conversations to free storage space">Cleanup</button>
+            </div>
+        </div>
+        <div class="export-import-section">
+            <div class="export-import-label">
+                <span class="material-icons">import_export</span>
+                Export / Import
+            </div>
+            <div class="export-import-actions">
+                <button id="exportConversation" class="system-prompt-btn system-prompt-save" title="Export current conversation as markdown">Export</button>
+                <button id="importConversation" class="system-prompt-btn system-prompt-reset" title="Import conversation from markdown file">Import</button>
+                <input type="file" id="importFileInput" style="display: none;" accept=".md,.txt" />
+            </div>
+        </div>
+        <div class="conversations-list" id="conversationsList">
+            <!-- Conversations will be listed here -->
+        </div>
+    </div>
+
+    <!-- Menu Trigger Arrow -->
+    <div class="menu-trigger" id="menuTrigger">❯</div>
+
+    <div class="chat-container">
+        <div class="chat-header">
+            <div class="header-left">
+                <div class="status-indicator"></div>
+                <h1>AgentFlow</h1>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <div class="audio-source-selector">
+                    <button class="audio-source-button" id="audioSourceButton">
+                        <span class="material-icons">mic</span>
+                        <span id="selectedAudioSource">Microphone</span>
+                    </button>
+                    <div class="audio-source-dropdown" id="audioSourceDropdown">
+                        <div class="audio-source-dropdown-header">Audio Source</div>
+                        <div id="audioSourceList">
+                            <div class="audio-source-option selected" data-source="microphone">
+                                <span class="material-icons">mic</span>
+                                Microphone
+                            </div>
+                            <div class="audio-source-option" data-source="system">
+                                <span class="material-icons">desktop_windows</span>
+                                System Audio
+                            </div>
+                            <div class="audio-source-option" data-source="both">
+                                <span class="material-icons">merge_type</span>
+                                Microphone + System Audio
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tool-selector">
+                    <button class="tool-button" id="toolButton">
+                        <span id="selectedToolsCount">Tools: All</span>
+                    </button>
+                    <div class="tool-dropdown" id="toolDropdown">
+                        <div class="tool-dropdown-header">
+                            <span>Select Tools</span>
+                            <div class="tool-controls">
+                                <button class="tool-toggle-all" id="toolToggleAll">All</button>
+                                <button class="tool-toggle-all" id="toolToggleNone" style="background: #ef4444;">None</button>
+                            </div>
+                        </div>
+                        <div id="toolsList">
+                            <div class="loading-tools">Loading available tools...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="model-selector">
+                    <button class="model-button" id="modelButton">
+                        <span id="selectedModelName">Loading models...</span>
+                    </button>
+                    <div class="model-dropdown" id="modelDropdown">
+                        <div class="model-dropdown-header">Select Model</div>
+                        <div id="modelsList">
+                            <div class="loading-models">Loading available models...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages will be added here -->
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+
+        <div class="chat-input-container">
+            <div class="input-wrapper">
+                <div class="input-section">
+                    <div class="file-preview-container" id="filePreviewContainer">
+                        <!-- File previews will be added here -->
+                    </div>
+                    <div class="input-resize-handle" id="inputResizeHandle"></div>
+                    <textarea
+                        id="chatInput"
+                        class="chat-input"
+                        placeholder="Type your message here... (Markdown supported)"
+                        rows="1"
+                    ></textarea>
+                </div>
+                <div class="input-controls">
+                    <button class="record-btn" id="recordBtn" title="Start recording">
+                        <span class="material-icons">mic</span>
+                    </button>
+                    <button class="stop-btn" id="stopBtn" title="Stop recording" style="display: none;">
+                        <span class="material-icons">stop</span>
+                    </button>
+                    <button class="segment-btn" id="segmentBtn" title="Create audio segment" style="display: none;">
+                        <span class="material-icons">content_cut</span>
+                    </button>
+                    <div class="recording-indicator" id="recordingIndicator" style="display: none;">
+                        <div class="recording-wave">
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                            <div class="wave-bar"></div>
+                        </div>
+                        <span class="recording-timer" id="recordingTimer">00:00</span>
+                    </div>
+                    <button class="attachment-btn" id="attachmentBtn" title="Add attachment (image, PDF, audio)">
+                        <span class="material-icons">attach_file</span>
+                    </button>
+                    <input type="file" id="attachmentInput" class="attachment-input" accept="image/*,application/pdf,audio/*,.webm" multiple>
+                    <button id="sendButton" class="send-button">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{.BaseURL}}/static/js/workerManager.js"></script>
+    <script src="{{.BaseURL}}/static/js/chat.js"></script>
+</body>
+</html>

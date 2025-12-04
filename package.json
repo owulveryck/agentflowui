@@ -1,0 +1,26 @@
+{
+  "name": "agentflow-ui",
+  "version": "1.0.0-mvp",
+  "description": "Modern web interface for interacting with AI agents",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "dev": "python3 -m http.server 8080",
+    "serve": "python3 -m http.server 8080"
+  },
+  "config": {
+    "apiServer": "http://localhost:4000",
+    "uiPort": "8080"
+  },
+  "keywords": [
+    "ai",
+    "chat",
+    "ui",
+    "web-workers",
+    "audio-recording"
+  ],
+  "author": "AgentFlow Team",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
