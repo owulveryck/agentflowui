@@ -1341,7 +1341,7 @@ class ChatUI {
             return;
         }
 
-        // Build message content - store gdrive:// references to save space
+        // Build message content - download gdrive:// to base64 before adding to messages
         let messageContent = text;
 
         // If we have files, create multimodal content
@@ -1350,18 +1350,43 @@ class ChatUI {
                 { type: 'text', text: text || 'Attached files' }
             ];
 
-            // Add files - keep gdrive:// references for storage
+            // Add files - download gdrive:// URLs and cache as base64
             for (const file of this.selectedFiles) {
+                let dataURL = file.dataURL;
+                let gdriveUrl = null;
+
+                // Download Google Drive files to base64 for in-memory use
+                if (file.dataURL.startsWith('gdrive://')) {
+                    gdriveUrl = file.dataURL;
+                    try {
+                        dataURL = await this.storageManager.downloadArtifact(file.dataURL);
+                    } catch (error) {
+                        console.error('Failed to download Google Drive file:', error);
+                        this.showNotification(`Failed to load file from Google Drive: ${error.message}`, 'error');
+                        return;
+                    }
+                }
+
                 if (file.fileType.startsWith('image/')) {
-                    messageContent.push({
+                    const imageData = {
                         type: 'image_url',
-                        image_url: { url: file.dataURL } // Keep gdrive:// or data URL as-is
-                    });
+                        image_url: { url: dataURL }
+                    };
+                    // Keep original gdrive URL for storage
+                    if (gdriveUrl) {
+                        imageData.image_url._gdriveUrl = gdriveUrl;
+                    }
+                    messageContent.push(imageData);
                 } else if (file.fileType.startsWith('audio/')) {
-                    messageContent.push({
+                    const audioData = {
                         type: 'audio',
-                        audio: { data: file.dataURL } // Keep gdrive:// or data URL as-is
-                    });
+                        audio: { data: dataURL }
+                    };
+                    // Keep original gdrive URL for storage
+                    if (gdriveUrl) {
+                        audioData.audio._gdriveUrl = gdriveUrl;
+                    }
+                    messageContent.push(audioData);
                 }
             }
         }
