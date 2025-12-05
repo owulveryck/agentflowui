@@ -105,7 +105,33 @@ class ChatUI {
         // Start with menu collapsed
         this.sideMenu.classList.add('collapsed');
 
+        // Warn before closing if uploads or sync in progress
+        this.setupBeforeUnloadWarning();
+
         console.log('AgentFlow UI initialized');
+    }
+
+    /**
+     * Setup warning before closing tab if operations in progress
+     */
+    setupBeforeUnloadWarning() {
+        window.addEventListener('beforeunload', (e) => {
+            // Check if any uploads in progress
+            const hasUploading = this.selectedFiles.some(file => file.uploading);
+
+            // Check if storage sync in progress
+            const syncStatus = this.storageManager.getSyncStatus();
+            const isSyncing = syncStatus.syncing;
+
+            if (hasUploading || isSyncing) {
+                // Modern browsers require returnValue to be set
+                e.preventDefault();
+                e.returnValue = ''; // Chrome requires returnValue to be set
+
+                // Some browsers use the return value
+                return 'You have uploads or sync in progress. Are you sure you want to leave?';
+            }
+        });
     }
 
     /**
