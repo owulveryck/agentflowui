@@ -1350,16 +1350,24 @@ class ChatUI {
                 { type: 'text', text: text || 'Attached files' }
             ];
 
-            // Add files - download gdrive:// URLs and cache as base64
+            // Add files - use gdriveUrl if available, otherwise local dataURL
             for (const file of this.selectedFiles) {
+                // Check if still uploading
+                if (file.uploading) {
+                    this.showNotification('Please wait for uploads to complete', 'warning');
+                    return;
+                }
+
+                // Prefer Google Drive URL if available
+                const useGdriveUrl = file.gdriveUrl;
                 let dataURL = file.dataURL;
                 let gdriveUrl = null;
 
-                // Download Google Drive files to base64 for in-memory use
-                if (file.dataURL.startsWith('gdrive://')) {
-                    gdriveUrl = file.dataURL;
+                if (useGdriveUrl) {
+                    gdriveUrl = file.gdriveUrl;
+                    // Download from Google Drive for immediate use
                     try {
-                        dataURL = await this.storageManager.downloadArtifact(file.dataURL);
+                        dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
                     } catch (error) {
                         console.error('Failed to download Google Drive file:', error);
                         this.showNotification(`Failed to load file from Google Drive: ${error.message}`, 'error');
@@ -1763,40 +1771,32 @@ class ChatUI {
             const duration = Date.now() - this.recordingStartTime;
             const filename = `recording_${Date.now()}.${this.getFileExtension(this.mediaRecorder.mimeType)}`;
 
-            // Try to upload recording to Google Drive
-            let recordingAdded = false;
+            // Show immediately with local data URL (non-blocking)
+            const dataURL = await this.blobToDataURL(audioBlob);
 
+            const fileObj = {
+                fileName: filename,
+                fileType: this.mediaRecorder.mimeType,
+                fileSize: audioBlob.size,
+                dataURL: dataURL,
+                isArtifact: false,
+                uploading: false
+            };
+
+            this.selectedFiles.push(fileObj);
+            this.renderFilePreview(); // Show immediately!
+
+            // Upload to Google Drive in background if online
             const syncStatus = this.storageManager.getSyncStatus();
             if (syncStatus.mode === 'online') {
-                try {
-                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, filename);
+                fileObj.uploading = true;
+                this.renderFilePreview(); // Update to show uploading state
 
-                    this.selectedFiles.push({
-                        fileName: filename,
-                        fileType: this.mediaRecorder.mimeType,
-                        fileSize: audioBlob.size,
-                        dataURL: gdriveUrl,
-                        isArtifact: true,
-                        source: 'gdrive'
-                    });
-                    recordingAdded = true;
-                    console.log('Recording uploaded to Google Drive');
-                } catch (gdriveError) {
-                    console.warn('Google Drive upload failed for recording:', gdriveError.message);
-                }
-            }
-
-            // Fallback: create temporary dataURL (won't be saved)
-            if (!recordingAdded) {
-                const dataURL = await this.blobToDataURL(audioBlob);
-                this.selectedFiles.push({
-                    fileName: filename,
-                    fileType: this.mediaRecorder.mimeType,
-                    fileSize: audioBlob.size,
-                    dataURL: dataURL,
-                    isArtifact: false,
-                    temporary: true
-                });
+                // Non-blocking upload
+                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
+            } else {
+                // Mark as temporary if offline
+                fileObj.temporary = true;
                 this.showNotification('Recording added (will not be saved - connect to Google Drive to save)', 'warning');
             }
 
@@ -1871,68 +1871,71 @@ class ChatUI {
                 try {
                     const isAudio = file.type.startsWith('audio/');
                     const isImage = file.type.startsWith('image/');
-                    let fileAdded = false;
 
-                    // Try Google Drive if online - always upload images and audio to avoid losing them
+                    // Show immediately with local data URL (non-blocking)
+                    const dataURL = await this.fileToDataURL(file);
+
+                    const fileObj = {
+                        fileName: file.name,
+                        fileType: file.type,
+                        fileSize: file.size,
+                        dataURL: dataURL,
+                        isArtifact: false,
+                        uploading: false
+                    };
+
+                    this.selectedFiles.push(fileObj);
+                    this.renderFilePreview(); // Show immediately!
+
+                    // Upload to Google Drive in background if online
                     const syncStatus = this.storageManager.getSyncStatus();
                     if (syncStatus.mode === 'online' && (isAudio || isImage || file.size > this.FILE_SIZE_THRESHOLD)) {
-                        try {
-                            const gdriveUrl = await this.storageManager.uploadArtifact(file, file.name);
+                        fileObj.uploading = true;
+                        this.renderFilePreview(); // Update to show uploading state
 
-                            this.selectedFiles.push({
-                                fileName: file.name,
-                                fileType: file.type,
-                                fileSize: file.size,
-                                dataURL: gdriveUrl,
-                                isArtifact: true,
-                                source: 'gdrive'
-                            });
-                            fileAdded = true;
-                            console.log('File uploaded to Google Drive:', gdriveUrl);
-                        } catch (gdriveError) {
-                            console.warn('Google Drive upload failed:', gdriveError.message);
-                            // Will fallback below
-                        }
+                        // Non-blocking upload
+                        this.uploadToGoogleDriveInBackground(file, fileObj);
+                    } else if (isAudio || isImage) {
+                        // Mark as temporary if offline
+                        fileObj.temporary = true;
+                        const fileTypeLabel = isAudio ? 'Audio' : 'Image';
+                        this.showNotification(`${fileTypeLabel} added (will not be saved - connect to Google Drive to save)`, 'warning');
                     }
-
-                    // Fallback: store inline if Google Drive upload failed or offline
-                    if (!fileAdded) {
-                        if (isAudio || isImage) {
-                            // Audio/Images without Google Drive: create temporary dataURL that won't be saved
-                            const dataURL = await this.fileToDataURL(file);
-
-                            this.selectedFiles.push({
-                                fileName: file.name,
-                                fileType: file.type,
-                                fileSize: file.size,
-                                dataURL: dataURL,
-                                isArtifact: false,
-                                temporary: true // Mark as temporary - will be removed before saving
-                            });
-
-                            const fileTypeLabel = isAudio ? 'Audio' : 'Image';
-                            this.showNotification(`${fileTypeLabel} added (will not be saved - connect to Google Drive to save)`, 'warning');
-                        } else {
-                            // Store PDFs as data URL (small files)
-                            const dataURL = await this.fileToDataURL(file);
-
-                            this.selectedFiles.push({
-                                fileName: file.name,
-                                fileType: file.type,
-                                fileSize: file.size,
-                                dataURL: dataURL,
-                                isArtifact: false
-                            });
-                        }
-                    }
-
-                    this.renderFilePreview();
 
                 } catch (error) {
                     console.error('File processing error:', error);
                     this.showNotification(`Failed to process ${file.name}`, 'error');
                 }
             }
+        }
+    }
+
+    /**
+     * Upload file to Google Drive in background (non-blocking)
+     */
+    async uploadToGoogleDriveInBackground(file, fileObj) {
+        try {
+            // Handle both File and Blob objects
+            const filename = file.name || fileObj.fileName;
+            const gdriveUrl = await this.storageManager.uploadArtifact(file, filename);
+
+            // Update file object with Google Drive URL
+            fileObj.gdriveUrl = gdriveUrl;
+            fileObj.isArtifact = true;
+            fileObj.uploading = false;
+            fileObj.source = 'gdrive';
+
+            console.log('File uploaded to Google Drive:', gdriveUrl);
+
+            // Re-render to update badge
+            this.renderFilePreview();
+        } catch (error) {
+            console.warn('Google Drive upload failed:', error.message);
+            fileObj.uploading = false;
+            fileObj.uploadError = true;
+            fileObj.temporary = true;
+            this.showNotification(`Upload failed: ${fileObj.fileName}`, 'warning');
+            this.renderFilePreview();
         }
     }
 
@@ -1951,8 +1954,12 @@ class ChatUI {
             const sizeStr = this.formatFileSize(file.fileSize);
             let badge = '';
 
-            if (file.isArtifact) {
+            if (file.uploading) {
+                badge = '<span class="artifact-badge" style="background-color: var(--turquoise);">UPLOADING...</span>';
+            } else if (file.isArtifact) {
                 badge = '<span class="artifact-badge">GDRIVE</span>';
+            } else if (file.uploadError) {
+                badge = '<span class="artifact-badge" style="background-color: var(--error-color);">ERROR</span>';
             } else if (file.temporary) {
                 badge = '<span class="artifact-badge" style="background-color: var(--warning-color);">TEMP</span>';
             }
@@ -1960,20 +1967,13 @@ class ChatUI {
             // Show image thumbnail for image files
             let thumbnail = '';
             if (file.fileType.startsWith('image/')) {
+                // Always use the local dataURL for preview (instant display)
                 let imageUrl = file.dataURL;
 
-                // Download Google Drive images for preview
-                if (file.dataURL.startsWith('gdrive://')) {
-                    try {
-                        imageUrl = await this.storageManager.downloadArtifact(file.dataURL);
-                    } catch (error) {
-                        console.warn('Failed to download Google Drive thumbnail:', error);
-                        thumbnail = `<div class="file-preview-thumbnail-placeholder"><span class="material-icons">image</span></div>`;
-                    }
-                }
-
-                if (!thumbnail && imageUrl) {
+                if (imageUrl && !imageUrl.startsWith('gdrive://')) {
                     thumbnail = `<img src="${this.escapeHtml(imageUrl)}" alt="${this.escapeHtml(file.fileName)}" class="file-preview-thumbnail" />`;
+                } else {
+                    thumbnail = `<div class="file-preview-thumbnail-placeholder"><span class="material-icons">image</span></div>`;
                 }
             }
 
