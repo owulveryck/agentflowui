@@ -1264,14 +1264,13 @@ body {
 }
 
 .message-audio-container {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-md);
+    display: block;
     padding: var(--spacing-md);
     margin: var(--spacing-sm) 0;
     background-color: rgba(0, 0, 0, 0.03);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
+    max-width: 500px;
     transition: background-color var(--transition-fast);
 }
 
@@ -1279,66 +1278,145 @@ body {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
-.audio-icon {
+.audio-player {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    background-color: var(--turquoise);
-    border-radius: var(--radius-md);
-    flex-shrink: 0;
+    align-items: flex-start;
+    gap: var(--spacing-md);
 }
 
-.audio-icon .material-icons {
-    font-size: 32px;
-    color: var(--white);
-}
-
-.audio-info {
+.audio-player-controls {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--spacing-sm);
-    flex: 1;
+    min-width: 0;
 }
 
-.audio-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-primary);
+.audio-waveform-container {
+    position: relative;
+    width: 100%;
+    height: 60px;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
 }
 
-.audio-actions {
+.audio-waveform {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.audio-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.audio-progress-fill {
+    height: 100%;
+    background: linear-gradient(to right, rgba(0, 210, 221, 0.3), rgba(60, 215, 224, 0.3));
+    transition: width 0.1s linear;
+}
+
+.audio-meta {
     display: flex;
-    gap: var(--spacing-sm);
     align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+}
+
+.audio-time {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-family: 'Courier New', monospace;
+}
+
+.audio-secondary-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.audio-speed {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background-color: var(--white);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.audio-speed:hover {
+    border-color: var(--navy-blue);
+}
+
+.audio-speed:focus {
+    outline: none;
+    border-color: var(--navy-blue);
+    box-shadow: 0 0 0 3px var(--navy-10);
+}
+
+.audio-download-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-decoration: none;
+}
+
+.audio-download-btn:hover {
+    background-color: var(--navy-10);
+    color: var(--navy-blue);
+}
+
+.audio-download-btn .material-icons {
+    font-size: 18px;
 }
 
 .audio-play-btn {
     display: inline-flex;
     align-items: center;
-    gap: var(--spacing-xs);
-    padding: var(--spacing-xs) var(--spacing-sm);
+    justify-content: center;
+    width: 48px;
+    height: 48px;
     background-color: var(--navy-blue);
     color: var(--white);
     border: none;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    font-weight: 500;
+    border-radius: 50%;
     cursor: pointer;
+    flex-shrink: 0;
     transition: all var(--transition-fast);
 }
 
 .audio-play-btn:hover {
     background-color: var(--navy-80);
+    transform: scale(1.05);
 }
 
 .audio-play-btn .material-icons {
-    font-size: 16px;
+    font-size: 24px;
 }
 
-.audio-play-btn.playing .material-icons {
-    content: 'pause';
+.audio-play-btn.playing {
+    background-color: var(--turquoise);
+}
+
+.audio-play-btn.playing:hover {
+    background-color: var(--turquoise-90);
 }
 
 .audio-download {

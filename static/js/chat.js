@@ -2069,27 +2069,29 @@ class ChatUI {
     }
 
     /**
-     * Toggle audio playback
+     * Toggle audio playback with enhanced controls
      */
     toggleAudioPlayback(button) {
         const audioData = button.dataset.audio;
+        const audioId = button.dataset.audioId;
         if (!audioData) return;
 
         // Check if this audio is currently playing
-        if (this.currentlyPlayingAudio && this.currentlyPlayingAudio.button === button) {
-            // Stop playing
-            this.currentlyPlayingAudio.audio.pause();
-            this.currentlyPlayingAudio.audio.currentTime = 0;
-            button.querySelector('.material-icons').textContent = 'play_arrow';
-            button.classList.remove('playing');
-            this.currentlyPlayingAudio = null;
+        if (this.currentlyPlayingAudio && this.currentlyPlayingAudio.audioId === audioId) {
+            // Toggle pause/play
+            if (this.currentlyPlayingAudio.audio.paused) {
+                this.currentlyPlayingAudio.audio.play();
+                button.querySelector('.material-icons').textContent = 'pause';
+                button.classList.add('playing');
+            } else {
+                this.currentlyPlayingAudio.audio.pause();
+                button.querySelector('.material-icons').textContent = 'play_arrow';
+                button.classList.remove('playing');
+            }
         } else {
             // Stop any currently playing audio
             if (this.currentlyPlayingAudio) {
-                this.currentlyPlayingAudio.audio.pause();
-                this.currentlyPlayingAudio.audio.currentTime = 0;
-                this.currentlyPlayingAudio.button.querySelector('.material-icons').textContent = 'play_arrow';
-                this.currentlyPlayingAudio.button.classList.remove('playing');
+                this.stopAudioPlayback();
             }
 
             // Create and play new audio
@@ -2097,9 +2099,17 @@ class ChatUI {
             button.querySelector('.material-icons').textContent = 'pause';
             button.classList.add('playing');
 
+            // Get playback speed
+            const speedSelect = document.querySelector(`.audio-speed[data-audio-id="${audioId}"]`);
+            if (speedSelect) {
+                audio.playbackRate = parseFloat(speedSelect.value);
+            }
+
+            // Setup event listeners
             audio.addEventListener('ended', () => {
                 button.querySelector('.material-icons').textContent = 'play_arrow';
                 button.classList.remove('playing');
+                this.updateAudioProgress(audioId, 0, audio.duration);
                 this.currentlyPlayingAudio = null;
             });
 
@@ -2111,8 +2121,131 @@ class ChatUI {
                 this.currentlyPlayingAudio = null;
             });
 
+            audio.addEventListener('loadedmetadata', () => {
+                this.updateAudioProgress(audioId, 0, audio.duration);
+                this.drawAudioWaveform(audioId, audioData);
+            });
+
+            audio.addEventListener('timeupdate', () => {
+                this.updateAudioProgress(audioId, audio.currentTime, audio.duration);
+            });
+
             audio.play();
-            this.currentlyPlayingAudio = { audio, button };
+            this.currentlyPlayingAudio = { audio, button, audioId };
+
+            // Handle playback speed changes
+            if (speedSelect) {
+                speedSelect.addEventListener('change', () => {
+                    audio.playbackRate = parseFloat(speedSelect.value);
+                });
+            }
+        }
+    }
+
+    /**
+     * Stop audio playback
+     */
+    stopAudioPlayback() {
+        if (!this.currentlyPlayingAudio) return;
+
+        this.currentlyPlayingAudio.audio.pause();
+        this.currentlyPlayingAudio.audio.currentTime = 0;
+        this.currentlyPlayingAudio.button.querySelector('.material-icons').textContent = 'play_arrow';
+        this.currentlyPlayingAudio.button.classList.remove('playing');
+
+        // Reset progress
+        this.updateAudioProgress(this.currentlyPlayingAudio.audioId, 0, this.currentlyPlayingAudio.audio.duration);
+
+        this.currentlyPlayingAudio = null;
+    }
+
+    /**
+     * Update audio progress bar and time display
+     */
+    updateAudioProgress(audioId, currentTime, duration) {
+        const progressFill = document.querySelector(`.audio-progress-fill[data-audio-id="${audioId}"]`);
+        const timeDisplay = document.querySelector(`.audio-time[data-audio-id="${audioId}"]`);
+
+        if (progressFill && !isNaN(duration) && duration > 0) {
+            const percentage = (currentTime / duration) * 100;
+            progressFill.style.width = `${percentage}%`;
+        }
+
+        if (timeDisplay && !isNaN(duration)) {
+            const formatTime = (seconds) => {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            };
+
+            timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+        }
+    }
+
+    /**
+     * Draw audio waveform visualization
+     */
+    async drawAudioWaveform(audioId, audioData) {
+        const canvas = document.querySelector(`.audio-waveform[data-audio-id="${audioId}"]`);
+        if (!canvas) return;
+
+        try {
+            // Create audio context
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Fetch audio data
+            const response = await fetch(audioData);
+            const arrayBuffer = await response.arrayBuffer();
+            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+            // Get audio data
+            const rawData = audioBuffer.getChannelData(0);
+            const samples = 100; // Number of bars in waveform
+            const blockSize = Math.floor(rawData.length / samples);
+            const filteredData = [];
+
+            for (let i = 0; i < samples; i++) {
+                let blockStart = blockSize * i;
+                let sum = 0;
+                for (let j = 0; j < blockSize; j++) {
+                    sum += Math.abs(rawData[blockStart + j]);
+                }
+                filteredData.push(sum / blockSize);
+            }
+
+            // Normalize data
+            const maxValue = Math.max(...filteredData);
+            const normalizedData = filteredData.map(n => n / maxValue);
+
+            // Draw waveform
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const barWidth = width / samples;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw bars
+            for (let i = 0; i < normalizedData.length; i++) {
+                const barHeight = normalizedData[i] * height * 0.8;
+                const x = i * barWidth;
+                const y = (height - barHeight) / 2;
+
+                // Gradient
+                const gradient = ctx.createLinearGradient(0, 0, 0, height);
+                gradient.addColorStop(0, '#00D2DD');
+                gradient.addColorStop(1, '#3CD7E0');
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, barWidth - 1, barHeight);
+            }
+        } catch (error) {
+            console.error('Failed to draw waveform:', error);
+            // Draw placeholder waveform
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#E0E0E0';
+            ctx.fillRect(0, canvas.height / 2 - 2, canvas.width, 4);
         }
     }
 
@@ -2182,21 +2315,35 @@ class ChatUI {
                         const timestamp = new Date().getTime();
                         const filename = `recording_${timestamp}.webm`;
 
-                        html += `<div class="message-audio-container">
-                            <div class="audio-icon">
-                                <span class="material-icons">audiotrack</span>
-                            </div>
-                            <div class="audio-info">
-                                <span class="audio-name">Audio Recording</span>
-                                <div class="audio-actions">
-                                    <button class="audio-play-btn" data-audio="${this.escapeHtml(data)}" title="Play">
-                                        <span class="material-icons">play_arrow</span>
-                                        Play
-                                    </button>
-                                    <a href="${this.escapeHtml(data)}" download="${this.escapeHtml(filename)}" class="audio-download">
-                                        <span class="material-icons">download</span>
-                                        Download
-                                    </a>
+                        const audioId = `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                        html += `<div class="message-audio-container" data-audio-id="${audioId}">
+                            <div class="audio-player">
+                                <button class="audio-play-btn" data-audio="${this.escapeHtml(data)}" data-audio-id="${audioId}" title="Play">
+                                    <span class="material-icons">play_arrow</span>
+                                </button>
+                                <div class="audio-player-controls">
+                                    <div class="audio-waveform-container">
+                                        <canvas class="audio-waveform" data-audio-id="${audioId}" width="300" height="60"></canvas>
+                                        <div class="audio-progress-bar">
+                                            <div class="audio-progress-fill" data-audio-id="${audioId}"></div>
+                                        </div>
+                                    </div>
+                                    <div class="audio-meta">
+                                        <span class="audio-time" data-audio-id="${audioId}">0:00 / 0:00</span>
+                                        <div class="audio-secondary-controls">
+                                            <select class="audio-speed" data-audio-id="${audioId}" title="Playback speed">
+                                                <option value="0.5">0.5x</option>
+                                                <option value="0.75">0.75x</option>
+                                                <option value="1" selected>1x</option>
+                                                <option value="1.25">1.25x</option>
+                                                <option value="1.5">1.5x</option>
+                                                <option value="2">2x</option>
+                                            </select>
+                                            <a href="${this.escapeHtml(data)}" download="${this.escapeHtml(filename)}" class="audio-download-btn" title="Download">
+                                                <span class="material-icons">download</span>
+                                            </a>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>`;
