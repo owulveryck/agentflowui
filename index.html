@@ -27,17 +27,20 @@
     </script>
 </head>
 <body>
+    <!-- Skip to main content for keyboard users -->
+    <a href="#chat-messages" class="skip-link">Skip to main content</a>
+
     <!-- Main Container -->
     <div class="app-container">
         <!-- Mobile Menu Overlay -->
         <div id="mobile-menu-overlay" class="mobile-menu-overlay"></div>
 
         <!-- Side Menu -->
-        <aside id="side-menu" class="side-menu">
+        <aside id="side-menu" class="side-menu" role="navigation" aria-label="Conversation navigation">
             <div class="menu-header">
                 <h2>AgentFlow</h2>
                 <div class="dropdown-container">
-                    <button id="settings-btn" class="icon-btn-small" title="Settings">
+                    <button id="settings-btn" class="icon-btn-small" title="Settings" aria-label="Open settings menu" aria-haspopup="true">
                         <span class="material-icons">settings</span>
                     </button>
                     <div id="settings-dropdown" class="dropdown hidden">
@@ -136,13 +139,13 @@
                     </button>
                 </div>
 
-                <div class="search-container">
-                    <span class="material-icons search-icon">search</span>
-                    <input type="text" id="conversation-search" class="conversation-search" placeholder="Search conversations...">
-                    <button id="search-filters-btn" class="icon-btn-clear" title="Advanced filters">
+                <div class="search-container" role="search">
+                    <span class="material-icons search-icon" aria-hidden="true">search</span>
+                    <input type="text" id="conversation-search" class="conversation-search" placeholder="Search conversations..." aria-label="Search conversations">
+                    <button id="search-filters-btn" class="icon-btn-clear" title="Advanced filters" aria-label="Toggle advanced search filters" aria-pressed="false">
                         <span class="material-icons">tune</span>
                     </button>
-                    <button id="clear-search" class="icon-btn-clear hidden">
+                    <button id="clear-search" class="icon-btn-clear hidden" aria-label="Clear search">
                         <span class="material-icons">close</span>
                     </button>
                 </div>
@@ -192,15 +195,15 @@
         </aside>
 
         <!-- Main Content -->
-        <main class="main-content">
+        <main class="main-content" role="main" aria-label="Chat interface">
             <!-- Header -->
-            <header class="chat-header">
-                <button id="menu-toggle" class="icon-btn">
+            <header class="chat-header" role="banner">
+                <button id="menu-toggle" class="icon-btn" aria-label="Toggle conversation menu" aria-expanded="false">
                     <span class="material-icons">menu</span>
                 </button>
 
-                <button id="new-chat-btn" class="btn btn-primary">
-                    <span class="material-icons">add</span>
+                <button id="new-chat-btn" class="btn btn-primary" aria-label="Start new conversation">
+                    <span class="material-icons" aria-hidden="true">add</span>
                     New Chat
                 </button>
 
@@ -266,10 +269,13 @@
             </header>
 
             <!-- Chat Messages -->
-            <div id="chat-messages" class="chat-messages"></div>
+            <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-label="Chat messages"></div>
+
+            <!-- Live region for status announcements -->
+            <div id="status-announcer" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
 
             <!-- Recording Indicator -->
-            <div id="recording-indicator" class="recording-indicator hidden">
+            <div id="recording-indicator" class="recording-indicator hidden" role="status" aria-live="assertive">
                 <div class="recording-animation">
                     <span class="recording-dot"></span>
                 </div>
@@ -321,34 +327,36 @@
             </div>
 
             <!-- Input Area -->
-            <div class="input-container">
+            <div class="input-container" role="form" aria-label="Message input">
                 <div class="input-row">
                     <!-- Recording Controls -->
-                    <button id="record-btn" class="icon-btn" title="Start Recording">
+                    <button id="record-btn" class="icon-btn" title="Start Recording" aria-label="Start audio recording">
                         <span class="material-icons">mic</span>
                     </button>
-                    <button id="stop-record-btn" class="icon-btn hidden" title="Stop Recording">
+                    <button id="stop-record-btn" class="icon-btn hidden" title="Stop Recording" aria-label="Stop audio recording">
                         <span class="material-icons">stop</span>
                     </button>
-                    <button id="segment-btn" class="icon-btn hidden" title="Create Segment">
+                    <button id="segment-btn" class="icon-btn hidden" title="Create Segment" aria-label="Create recording segment">
                         <span class="material-icons">fiber_manual_record</span>
                     </button>
 
                     <!-- File Attachment -->
-                    <button id="attach-btn" class="icon-btn" title="Attach File">
+                    <button id="attach-btn" class="icon-btn" title="Attach File" aria-label="Attach files">
                         <span class="material-icons">attach_file</span>
                     </button>
-                    <input type="file" id="file-input" accept="image/*,application/pdf,audio/*" multiple style="display: none;">
+                    <input type="file" id="file-input" accept="image/*,application/pdf,audio/*" multiple style="display: none;" aria-label="File upload input">
 
                     <!-- Text Input -->
                     <textarea
                         id="user-input"
                         placeholder="Type your message..."
                         rows="1"
+                        aria-label="Type your message"
+                        aria-multiline="true"
                     ></textarea>
 
                     <!-- Voice Input (Speech-to-Text) -->
-                    <button id="voice-input-btn" class="icon-btn" title="Voice Input (Speech-to-Text)">
+                    <button id="voice-input-btn" class="icon-btn" title="Voice Input (Speech-to-Text)" aria-label="Voice input">
                         <span class="material-icons">keyboard_voice</span>
                     </button>
 

@@ -5688,6 +5688,10 @@ class ChatUI {
         if (this.mobileMenuOverlay && window.innerWidth <= 768) {
             this.mobileMenuOverlay.classList.add('visible');
         }
+        // Update ARIA attributes
+        if (this.menuToggle) {
+            this.menuToggle.setAttribute('aria-expanded', 'true');
+        }
     }
 
     /**
@@ -5697,6 +5701,10 @@ class ChatUI {
         this.sideMenu.classList.add('collapsed');
         if (this.mobileMenuOverlay) {
             this.mobileMenuOverlay.classList.remove('visible');
+        }
+        // Update ARIA attributes
+        if (this.menuToggle) {
+            this.menuToggle.setAttribute('aria-expanded', 'false');
         }
     }
 

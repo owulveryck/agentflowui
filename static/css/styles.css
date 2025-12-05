@@ -2878,6 +2878,141 @@ body {
     display: none !important;
 }
 
+/* Visually hidden but accessible to screen readers */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Skip to main content link for keyboard navigation */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: var(--navy-blue);
+    color: var(--white);
+    padding: var(--spacing-sm) var(--spacing-md);
+    text-decoration: none;
+    border-radius: var(--radius-sm);
+    z-index: 10000;
+}
+
+.skip-link:focus {
+    top: var(--spacing-sm);
+}
+
+/* ============================================
+   High Contrast Mode
+   ============================================ */
+@media (prefers-contrast: high) {
+    :root {
+        --navy-blue: #000000;
+        --turquoise: #00FFFF;
+        --text-primary: #000000;
+        --text-secondary: #1a1a1a;
+        --border-color: #000000;
+        --bg-primary: #FFFFFF;
+        --bg-secondary: #F0F0F0;
+    }
+
+    body.dark-mode {
+        --bg-primary: #000000;
+        --bg-secondary: #1a1a1a;
+        --text-primary: #FFFFFF;
+        --text-secondary: #E0E0E0;
+        --border-color: #FFFFFF;
+    }
+
+    /* Increase border thickness */
+    .btn,
+    .conversation-item,
+    .folder-item,
+    .dropdown,
+    .modal-content,
+    #user-input,
+    .conversation-search {
+        border-width: 2px;
+    }
+
+    /* Ensure sufficient contrast for all interactive elements */
+    .btn:focus,
+    .icon-btn:focus,
+    #user-input:focus,
+    .conversation-search:focus {
+        outline: 3px solid currentColor;
+        outline-offset: 2px;
+    }
+}
+
+/* ============================================
+   Reduced Motion
+   ============================================ */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Disable pulse animations */
+    .recording-dot,
+    .status-indicator.online,
+    .status-indicator.syncing,
+    .status-indicator.initializing,
+    #voice-input-btn.listening,
+    #audio-source-btn.recording {
+        animation: none !important;
+    }
+
+    /* Disable transform animations */
+    .side-menu {
+        transition: none !important;
+    }
+
+    /* Keep opacity transitions for visibility but make instant */
+    .mobile-menu-overlay,
+    .modal,
+    .dropdown {
+        transition: opacity 0.01ms !important;
+    }
+}
+
+/* ============================================
+   Focus Visible - Enhanced keyboard navigation
+   ============================================ */
+/* Only show focus outlines for keyboard navigation */
+:focus:not(:focus-visible) {
+    outline: none;
+}
+
+:focus-visible {
+    outline: 2px solid var(--turquoise);
+    outline-offset: 2px;
+}
+
+/* Specific focus styles for different elements */
+.btn:focus-visible,
+.icon-btn:focus-visible {
+    outline: 2px solid var(--turquoise);
+    outline-offset: 2px;
+}
+
+.conversation-item:focus-visible,
+.folder-item:focus-visible {
+    outline: 2px solid var(--turquoise);
+    outline-offset: -2px;
+}
+
 /* ============================================
    Mobile Responsive
    ============================================ */
