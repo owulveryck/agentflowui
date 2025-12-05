@@ -412,4 +412,64 @@ class GoogleDriveStorage {
         const data = await response.json();
         return data.storageQuota;
     }
+
+    /**
+     * Export conversation as Google Doc (upload markdown, auto-convert)
+     */
+    async exportToGoogleDocs(markdownContent, title) {
+        await this.init();
+
+        const token = await this.auth.getAccessToken();
+        if (!token) throw new Error('No access token');
+
+        try {
+            const metadata = {
+                name: `${title} - ${new Date().toLocaleDateString()}`,
+                mimeType: 'application/vnd.google-apps.document',
+                parents: [this.appFolderId]
+            };
+
+            // Create multipart upload
+            const boundary = 'boundary_' + Date.now();
+            const delimiter = "\r\n--" + boundary + "\r\n";
+            const closeDelimiter = "\r\n--" + boundary + "--";
+
+            const multipartRequestBody =
+                delimiter +
+                'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                JSON.stringify(metadata) +
+                delimiter +
+                'Content-Type: text/markdown\r\n\r\n' +
+                markdownContent +
+                closeDelimiter;
+
+            const response = await fetch(
+                `${this.uploadUrl}/files?uploadType=multipart&fields=id,name`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': `multipart/related; boundary="${boundary}"`
+                    },
+                    body: multipartRequestBody
+                }
+            );
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error?.message || 'Failed to create Google Doc');
+            }
+
+            const file = await response.json();
+            console.log('Google Doc created:', file.id);
+
+            return {
+                id: file.id,
+                url: `https://docs.google.com/document/d/${file.id}/edit`
+            };
+        } catch (error) {
+            console.error('Failed to export to Google Docs:', error);
+            throw error;
+        }
+    }
 }

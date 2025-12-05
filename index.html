@@ -33,28 +33,41 @@
         <aside id="side-menu" class="side-menu">
             <div class="menu-header">
                 <h2>AgentFlow</h2>
+                <div class="dropdown-container">
+                    <button id="settings-btn" class="icon-btn-small" title="Settings">
+                        <span class="material-icons">settings</span>
+                    </button>
+                    <div id="settings-dropdown" class="dropdown hidden">
+                        <div class="dropdown-list">
+                            <div class="dropdown-item" id="export-dropdown-btn">
+                                <span class="material-icons">file_download</span>
+                                Export Conversation
+                            </div>
+                            <div class="dropdown-item" id="export-gdocs-btn">
+                                <span class="material-icons">description</span>
+                                Export to Google Docs
+                            </div>
+                            <div class="dropdown-item" id="import-dropdown-btn">
+                                <span class="material-icons">file_upload</span>
+                                Import Conversation
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <input type="file" id="import-input" accept=".json,.md,.txt" style="display: none;">
             </div>
 
             <!-- System Prompt Section -->
-            <div class="menu-section">
-                <h3>System Prompt</h3>
-                <textarea id="system-prompt" rows="4" placeholder="Enter system prompt..."></textarea>
-            </div>
-
-            <!-- Export/Import Section -->
-            <div class="menu-section">
-                <h3>Backup & Restore</h3>
-                <div class="btn-group">
-                    <button id="export-btn" class="btn btn-secondary">
-                        <span class="material-icons">file_download</span>
-                        Export
-                    </button>
-                    <button id="import-btn" class="btn btn-secondary">
-                        <span class="material-icons">file_upload</span>
-                        Import
+            <div class="menu-section system-prompt-section">
+                <div class="section-header" id="system-prompt-header">
+                    <h3>System Prompt</h3>
+                    <button class="icon-btn-tiny" id="system-prompt-toggle" title="Toggle">
+                        <span class="material-icons">expand_less</span>
                     </button>
                 </div>
-                <input type="file" id="import-input" accept=".json,.md,.txt" style="display: none;">
+                <div id="system-prompt-content" class="collapsible-content">
+                    <textarea id="system-prompt" rows="4" placeholder="Enter system prompt..."></textarea>
+                </div>
             </div>
 
             <!-- Google Drive Sync Section -->
@@ -162,6 +175,7 @@
                     <span class="recording-dot"></span>
                 </div>
                 <span id="recording-timer">00:00</span>
+                <canvas id="audio-visualizer" class="audio-visualizer" width="200" height="40"></canvas>
             </div>
 
             <!-- File Preview -->
@@ -205,6 +219,9 @@
             </div>
         </main>
     </div>
+
+    <!-- Notification Toast Container -->
+    <div id="notification-container" class="notification-container"></div>
 
     <!-- Scripts -->
     <script src="./static/js/config.js"></script>

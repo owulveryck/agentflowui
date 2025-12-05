@@ -37,6 +37,14 @@ class ChatUI {
         this.uploadedChunks = []; // Track chunks already uploaded
         this.currentRecordingGDriveId = null; // Track the GDrive file being built
 
+        // Audio playback state
+        this.currentlyPlayingAudio = null; // { audio: Audio, button: HTMLElement }
+
+        // Audio visualization state
+        this.audioContext = null;
+        this.analyser = null;
+        this.visualizerAnimationId = null;
+
         // Worker manager
         this.workerManager = null;
         this.workerReady = false;
@@ -108,8 +116,19 @@ class ChatUI {
         const preferredSource = localStorage.getItem('preferredAudioSource') || 'microphone';
         this.selectAudioSource(preferredSource);
 
+        // Restore system prompt collapsed state
+        const systemPromptCollapsed = localStorage.getItem('systemPromptCollapsed') === 'true';
+        if (systemPromptCollapsed) {
+            this.systemPromptContent.classList.add('collapsed');
+            this.systemPromptToggle.classList.add('collapsed');
+            this.systemPromptToggle.querySelector('.material-icons').textContent = 'expand_more';
+        }
+
         // Start with menu collapsed
         this.sideMenu.classList.add('collapsed');
+
+        // Setup keyboard shortcuts
+        this.setupKeyboardShortcuts();
 
         // Warn before closing if uploads or sync in progress
         this.setupBeforeUnloadWarning();
@@ -136,6 +155,52 @@ class ChatUI {
 
                 // Some browsers use the return value
                 return 'You have uploads or sync in progress. Are you sure you want to leave?';
+            }
+        });
+    }
+
+    /**
+     * Setup keyboard shortcuts
+     */
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+            const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+            // Cmd/Ctrl + B: Toggle side menu
+            if (cmdOrCtrl && e.key === 'b') {
+                e.preventDefault();
+                this.sideMenu.classList.toggle('collapsed');
+            }
+
+            // Cmd/Ctrl + K: Focus conversation search
+            if (cmdOrCtrl && e.key === 'k') {
+                e.preventDefault();
+                if (!this.sideMenu.classList.contains('collapsed')) {
+                    this.conversationSearch.focus();
+                } else {
+                    // Open menu and focus search
+                    this.sideMenu.classList.remove('collapsed');
+                    setTimeout(() => this.conversationSearch.focus(), 100);
+                }
+            }
+
+            // Cmd/Ctrl + N: New chat
+            if (cmdOrCtrl && e.key === 'n') {
+                e.preventDefault();
+                this.createNewConversation();
+            }
+
+            // Escape: Close all dropdowns and collapse menu on mobile
+            if (e.key === 'Escape') {
+                this.modelDropdown.classList.add('hidden');
+                this.audioSourceDropdown.classList.add('hidden');
+                this.settingsDropdown.classList.add('hidden');
+
+                // On mobile, also collapse menu
+                if (window.innerWidth <= 768) {
+                    this.sideMenu.classList.add('collapsed');
+                }
             }
         });
     }
@@ -227,6 +292,7 @@ class ChatUI {
         this.recordingIndicator = document.getElementById('recording-indicator');
         this.audioSourceBtn = document.getElementById('audio-source-btn');
         this.audioSourceDropdown = document.getElementById('audio-source-dropdown');
+        this.audioVisualizer = document.getElementById('audio-visualizer');
 
         // File attachment
         this.attachBtn = document.getElementById('attach-btn');
@@ -239,9 +305,19 @@ class ChatUI {
         this.newChatBtn = document.getElementById('new-chat-btn');
         this.conversationsList = document.getElementById('conversations-list');
         this.systemPromptTextarea = document.getElementById('system-prompt');
-        this.exportBtn = document.getElementById('export-btn');
-        this.importBtn = document.getElementById('import-btn');
+
+        // Settings dropdown
+        this.settingsBtn = document.getElementById('settings-btn');
+        this.settingsDropdown = document.getElementById('settings-dropdown');
+        this.exportDropdownBtn = document.getElementById('export-dropdown-btn');
+        this.exportGDocsBtn = document.getElementById('export-gdocs-btn');
+        this.importDropdownBtn = document.getElementById('import-dropdown-btn');
         this.importInput = document.getElementById('import-input');
+
+        // System prompt collapsible
+        this.systemPromptHeader = document.getElementById('system-prompt-header');
+        this.systemPromptToggle = document.getElementById('system-prompt-toggle');
+        this.systemPromptContent = document.getElementById('system-prompt-content');
 
         // Google Drive sync
         this.gdriveStatus = document.getElementById('gdrive-status');
@@ -253,6 +329,9 @@ class ChatUI {
         this.conversationSearch = document.getElementById('conversation-search');
         this.clearSearchBtn = document.getElementById('clear-search');
         this.conversationCount = document.getElementById('conversation-count');
+
+        // Notification system
+        this.notificationContainer = document.getElementById('notification-container');
     }
 
     /**
@@ -281,6 +360,11 @@ class ChatUI {
      */
     async initializeStorage() {
         try {
+            // Show initializing state if we might be connecting to Google Drive
+            if (this.storageManager.auth.isAuthenticated()) {
+                this.updateSyncUI('initializing');
+            }
+
             await this.storageManager.init();
 
             // Setup storage event listeners
@@ -423,6 +507,10 @@ class ChatUI {
                 text: 'Syncing...',
                 icon: 'sync'
             },
+            'initializing': {
+                text: 'Connecting to Google Drive...',
+                icon: 'sync'
+            },
             'error': {
                 text: 'Sync error • Click to retry',
                 icon: 'cloud_off'
@@ -479,22 +567,53 @@ class ChatUI {
             this.sideMenu.classList.toggle('collapsed');
         });
 
-        this.newChatBtn.addEventListener('click', () => this.createNewConversation());
-
-        // System prompt
-        this.systemPromptTextarea.addEventListener('change', () => {
-            this.systemPrompt = this.systemPromptTextarea.value;
-            this.saveConversations();
+        this.newChatBtn.addEventListener('click', () => {
+            this.createNewConversation();
+            this.autoFoldMenu();
         });
 
-        // Export/Import
-        this.exportBtn.addEventListener('click', () => this.exportConversation());
-        this.importBtn.addEventListener('click', () => this.importInput.click());
+        // Settings dropdown
+        this.settingsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.settingsDropdown.classList.toggle('hidden');
+        });
+
+        this.exportDropdownBtn.addEventListener('click', () => {
+            this.exportConversation();
+            this.settingsDropdown.classList.add('hidden');
+        });
+
+        this.exportGDocsBtn.addEventListener('click', () => {
+            this.exportConversationToGoogleDocs();
+            this.settingsDropdown.classList.add('hidden');
+        });
+
+        this.importDropdownBtn.addEventListener('click', () => {
+            this.importInput.click();
+            this.settingsDropdown.classList.add('hidden');
+        });
+
         this.importInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.importConversation(e.target.files[0]);
                 e.target.value = '';
             }
+        });
+
+        // System prompt collapsible
+        this.systemPromptHeader.addEventListener('click', () => {
+            this.toggleSystemPrompt();
+        });
+
+        this.systemPromptToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleSystemPrompt();
+        });
+
+        // System prompt textarea change
+        this.systemPromptTextarea.addEventListener('change', () => {
+            this.systemPrompt = this.systemPromptTextarea.value;
+            this.saveConversations();
         });
 
         // Google Drive Sync - Click handler
@@ -550,6 +669,19 @@ class ChatUI {
             if (!this.audioSourceBtn.contains(e.target) && !this.audioSourceDropdown.contains(e.target)) {
                 this.audioSourceDropdown.classList.add('hidden');
             }
+            if (!this.settingsBtn.contains(e.target) && !this.settingsDropdown.contains(e.target)) {
+                this.settingsDropdown.classList.add('hidden');
+            }
+        });
+
+        // Auto-fold menu when typing in input
+        this.userInput.addEventListener('focus', () => {
+            this.autoFoldMenu();
+        });
+
+        // Auto-fold menu when clicking on chat messages area
+        this.chatMessages.addEventListener('click', () => {
+            this.autoFoldMenu();
         });
 
         // Search/Filter functionality
@@ -778,6 +910,39 @@ class ChatUI {
         } catch (error) {
             console.error('Failed to save with reduced data:', error);
             this.showNotification('Failed to save conversations. Please export manually.', 'error');
+        }
+    }
+
+    /**
+     * Toggle system prompt collapsed state
+     */
+    toggleSystemPrompt() {
+        const isCollapsed = this.systemPromptContent.classList.contains('collapsed');
+
+        if (isCollapsed) {
+            // Expand
+            this.systemPromptContent.classList.remove('collapsed');
+            this.systemPromptToggle.classList.remove('collapsed');
+            this.systemPromptToggle.querySelector('.material-icons').textContent = 'expand_less';
+            localStorage.setItem('systemPromptCollapsed', 'false');
+        } else {
+            // Collapse
+            this.systemPromptContent.classList.add('collapsed');
+            this.systemPromptToggle.classList.add('collapsed');
+            this.systemPromptToggle.querySelector('.material-icons').textContent = 'expand_more';
+            localStorage.setItem('systemPromptCollapsed', 'true');
+        }
+    }
+
+    /**
+     * Auto-fold side menu (for better mobile UX)
+     */
+    autoFoldMenu() {
+        // Only auto-fold on smaller screens or when menu is overlaying content
+        const windowWidth = window.innerWidth;
+
+        if (windowWidth <= 768 || !this.sideMenu.classList.contains('collapsed')) {
+            this.sideMenu.classList.add('collapsed');
         }
     }
 
@@ -1257,6 +1422,61 @@ class ChatUI {
                 this.replayFromMessage(index);
             });
         });
+
+        // Add event listeners for audio play buttons
+        document.querySelectorAll('.audio-play-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.toggleAudioPlayback(btn);
+            });
+        });
+    }
+
+    /**
+     * Toggle audio playback
+     */
+    toggleAudioPlayback(button) {
+        const audioData = button.dataset.audio;
+        if (!audioData) return;
+
+        // Check if this audio is currently playing
+        if (this.currentlyPlayingAudio && this.currentlyPlayingAudio.button === button) {
+            // Stop playing
+            this.currentlyPlayingAudio.audio.pause();
+            this.currentlyPlayingAudio.audio.currentTime = 0;
+            button.querySelector('.material-icons').textContent = 'play_arrow';
+            button.classList.remove('playing');
+            this.currentlyPlayingAudio = null;
+        } else {
+            // Stop any currently playing audio
+            if (this.currentlyPlayingAudio) {
+                this.currentlyPlayingAudio.audio.pause();
+                this.currentlyPlayingAudio.audio.currentTime = 0;
+                this.currentlyPlayingAudio.button.querySelector('.material-icons').textContent = 'play_arrow';
+                this.currentlyPlayingAudio.button.classList.remove('playing');
+            }
+
+            // Create and play new audio
+            const audio = new Audio(audioData);
+            button.querySelector('.material-icons').textContent = 'pause';
+            button.classList.add('playing');
+
+            audio.addEventListener('ended', () => {
+                button.querySelector('.material-icons').textContent = 'play_arrow';
+                button.classList.remove('playing');
+                this.currentlyPlayingAudio = null;
+            });
+
+            audio.addEventListener('error', (e) => {
+                console.error('Audio playback error:', e);
+                this.showNotification('Failed to play audio', 'error');
+                button.querySelector('.material-icons').textContent = 'play_arrow';
+                button.classList.remove('playing');
+                this.currentlyPlayingAudio = null;
+            });
+
+            audio.play();
+            this.currentlyPlayingAudio = { audio, button };
+        }
     }
 
     /**
@@ -1314,9 +1534,27 @@ class ChatUI {
                 } else if (item.type === 'audio' && item.audio) {
                     const data = item.audio.data;
                     if (data && data !== '[Audio data not saved to conserve storage]') {
-                        html += `<div class="message-audio" data-audio="${this.escapeHtml(data)}">
-                            <span class="material-icons">audiotrack</span>
-                            <span class="audio-label">Audio file</span>
+                        // Generate filename
+                        const timestamp = new Date().getTime();
+                        const filename = `recording_${timestamp}.webm`;
+
+                        html += `<div class="message-audio-container">
+                            <div class="audio-icon">
+                                <span class="material-icons">audiotrack</span>
+                            </div>
+                            <div class="audio-info">
+                                <span class="audio-name">Audio Recording</span>
+                                <div class="audio-actions">
+                                    <button class="audio-play-btn" data-audio="${this.escapeHtml(data)}" title="Play">
+                                        <span class="material-icons">play_arrow</span>
+                                        Play
+                                    </button>
+                                    <a href="${this.escapeHtml(data)}" download="${this.escapeHtml(filename)}" class="audio-download">
+                                        <span class="material-icons">download</span>
+                                        Download
+                                    </a>
+                                </div>
+                            </div>
                         </div>`;
                     } else {
                         html += `<div class="message-file-placeholder"><span class="material-icons">audiotrack</span> <em>Audio not available</em></div>`;
@@ -1677,9 +1915,12 @@ class ChatUI {
 
         // If we have files, create multimodal content
         if (this.selectedFiles.length > 0) {
-            messageContent = [
-                { type: 'text', text: text || 'Attached files' }
-            ];
+            messageContent = [];
+
+            // Only add text if user actually typed something
+            if (text) {
+                messageContent.push({ type: 'text', text: text });
+            }
 
             // Add files - use local dataURL immediately, track pending uploads
             for (const file of this.selectedFiles) {
@@ -1993,40 +2234,91 @@ class ChatUI {
                 });
 
             case 'system':
-                return await navigator.mediaDevices.getDisplayMedia({
-                    video: false,
-                    audio: {
-                        echoCancellation: false,
-                        noiseSuppression: false
-                    }
+                // Video is required for system audio capture
+                const displayStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true,
+                    audio: true
                 });
+
+                // Extract only audio tracks for recording
+                const audioTracks = displayStream.getAudioTracks();
+                if (audioTracks.length === 0) {
+                    displayStream.getTracks().forEach(track => track.stop());
+                    throw new Error('No system audio available');
+                }
+
+                // Create a new MediaStream with only audio tracks
+                const audioOnlyStream = new MediaStream(audioTracks);
+
+                // Stop video tracks to save resources
+                displayStream.getVideoTracks().forEach(track => track.stop());
+
+                return audioOnlyStream;
 
             case 'mixed':
                 try {
-                    const audioContext = new AudioContext();
-                    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    const systemStream = await navigator.mediaDevices.getDisplayMedia({ audio: true });
+                    // Get microphone stream
+                    const micStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
 
+                    // Get system audio stream (video required for getDisplayMedia)
+                    const displayStreamMixed = await navigator.mediaDevices.getDisplayMedia({
+                        audio: true,
+                        video: true
+                    });
+
+                    const systemAudioTracks = displayStreamMixed.getAudioTracks();
+
+                    // If no system audio is available, fall back to microphone only
+                    if (systemAudioTracks.length === 0) {
+                        console.warn('No system audio available, using microphone only');
+                        displayStreamMixed.getTracks().forEach(track => track.stop());
+                        return micStream;
+                    }
+
+                    // Create Web Audio API context for mixing
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+                    // Create audio sources
                     const micSource = audioContext.createMediaStreamSource(micStream);
-                    const systemSource = audioContext.createMediaStreamSource(systemStream);
-                    const destination = audioContext.createMediaStreamDestination();
+                    const systemSource = audioContext.createMediaStreamSource(new MediaStream(systemAudioTracks));
 
+                    // Create gain nodes for volume control
                     const micGain = audioContext.createGain();
-                    micGain.gain.value = 0.7;
-
                     const systemGain = audioContext.createGain();
+
+                    // Set volumes (slightly reduce to prevent clipping)
+                    micGain.gain.value = 0.7;
                     systemGain.gain.value = 0.8;
 
+                    // Create destination for mixed audio
+                    const destination = audioContext.createMediaStreamDestination();
+
+                    // Connect the audio graph
                     micSource.connect(micGain);
                     micGain.connect(destination);
 
                     systemSource.connect(systemGain);
                     systemGain.connect(destination);
 
+                    // Stop video tracks to save resources
+                    displayStreamMixed.getVideoTracks().forEach(track => track.stop());
+
                     return destination.stream;
                 } catch (error) {
                     console.warn('Failed to create mixed audio, falling back to microphone:', error);
-                    return await navigator.mediaDevices.getUserMedia({ audio: true });
+                    return await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
                 }
 
             default:
@@ -2088,6 +2380,7 @@ class ChatUI {
             // Update UI
             this.updateRecordingUI(true);
             this.startRecordingTimer();
+            this.startAudioVisualization();
 
             // Start periodic upload to Google Drive (every 30 seconds)
             const syncStatus = this.storageManager.getSyncStatus();
@@ -2177,6 +2470,7 @@ class ChatUI {
             this.mediaRecorder.stop();
             this.isRecording = false;
             this.stopRecordingTimer();
+            this.stopAudioVisualization();
 
             // Stop periodic upload timer
             if (this.recordingUploadInterval) {
@@ -2331,6 +2625,125 @@ class ChatUI {
             this.recordingTimerInterval = null;
         }
         this.recordingTimer.textContent = '00:00';
+    }
+
+    /**
+     * Start audio visualization
+     */
+    startAudioVisualization() {
+        if (!this.audioStream || !this.audioVisualizer) {
+            return;
+        }
+
+        try {
+            // Create audio context if not exists
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Create analyser node
+            this.analyser = this.audioContext.createAnalyser();
+            this.analyser.fftSize = 256;
+            this.analyser.smoothingTimeConstant = 0.8;
+
+            // Connect audio stream to analyser
+            const source = this.audioContext.createMediaStreamSource(this.audioStream);
+            source.connect(this.analyser);
+
+            // Start visualization loop
+            this.drawAudioVisualization();
+
+            console.log('Audio visualization started');
+        } catch (error) {
+            console.error('Failed to start audio visualization:', error);
+        }
+    }
+
+    /**
+     * Draw audio visualization on canvas
+     */
+    drawAudioVisualization() {
+        if (!this.analyser || !this.audioVisualizer) {
+            return;
+        }
+
+        const canvas = this.audioVisualizer;
+        const ctx = canvas.getContext('2d');
+        const bufferLength = this.analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const draw = () => {
+            if (!this.isRecording) {
+                return;
+            }
+
+            this.visualizerAnimationId = requestAnimationFrame(draw);
+
+            // Get frequency data
+            this.analyser.getByteFrequencyData(dataArray);
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw bars
+            const barCount = 16;
+            const barWidth = canvas.width / barCount;
+            const barSpacing = 2;
+
+            for (let i = 0; i < barCount; i++) {
+                // Sample frequency data
+                const dataIndex = Math.floor(i * bufferLength / barCount);
+                const value = dataArray[dataIndex];
+
+                // Normalize to canvas height (0-1)
+                const normalizedValue = value / 255;
+
+                // Calculate bar height with minimum height
+                const minHeight = 4;
+                const barHeight = Math.max(minHeight, normalizedValue * canvas.height);
+
+                // Calculate bar position (centered vertically)
+                const x = i * barWidth + barSpacing / 2;
+                const y = canvas.height - barHeight;
+
+                // Draw bar with gradient (turquoise to white)
+                const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
+                gradient.addColorStop(0, '#00D2DD'); // turquoise
+                gradient.addColorStop(0.5, '#3CD7E0'); // turquoise-90
+                gradient.addColorStop(1, '#FFFFFF'); // white
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, barWidth - barSpacing, barHeight);
+            }
+        };
+
+        draw();
+    }
+
+    /**
+     * Stop audio visualization
+     */
+    stopAudioVisualization() {
+        // Cancel animation frame
+        if (this.visualizerAnimationId) {
+            cancelAnimationFrame(this.visualizerAnimationId);
+            this.visualizerAnimationId = null;
+        }
+
+        // Clear canvas
+        if (this.audioVisualizer) {
+            const ctx = this.audioVisualizer.getContext('2d');
+            ctx.clearRect(0, 0, this.audioVisualizer.width, this.audioVisualizer.height);
+        }
+
+        // Disconnect analyser
+        if (this.analyser) {
+            this.analyser.disconnect();
+            this.analyser = null;
+        }
+
+        // Note: We don't close audioContext here as it might be reused
+        // It will be cleaned up when the page unloads
     }
 
     /**
@@ -2549,7 +2962,7 @@ class ChatUI {
     }
 
     /**
-     * Export conversation
+     * Export conversation (local download)
      */
     async exportConversation() {
         if (!this.currentConversationId) {
@@ -2586,6 +2999,80 @@ class ChatUI {
             console.error('Export failed:', error);
             this.showNotification('Export failed', 'error');
         }
+    }
+
+    /**
+     * Export conversation to Google Docs
+     */
+    async exportConversationToGoogleDocs() {
+        if (!this.currentConversationId) {
+            this.showNotification('No conversation to export', 'warning');
+            return;
+        }
+
+        // Check if online
+        const syncStatus = this.storageManager.getSyncStatus();
+        if (syncStatus.mode !== 'online') {
+            this.showNotification('Please connect to Google Drive first', 'warning');
+            return;
+        }
+
+        const conversation = this.conversations[this.currentConversationId];
+
+        try {
+            this.showNotification('Creating Google Doc...', 'info', { duration: 3000 });
+
+            // Get markdown export
+            let result;
+            if (this.workerReady) {
+                result = await this.workerManager.exportConversationAsMarkdown(conversation);
+            } else {
+                // Fallback - simple text export
+                const content = JSON.stringify(conversation, null, 2);
+                result = {
+                    success: true,
+                    data: { content }
+                };
+            }
+
+            if (!result.success) {
+                throw new Error('Failed to generate markdown');
+            }
+
+            let markdown = result.data.content;
+
+            // Handle gdrive:// image references - replace with placeholders
+            markdown = this.convertGDriveReferencesForExport(markdown);
+
+            // Upload to Google Docs
+            const docInfo = await this.storageManager.exportToGoogleDocs(
+                markdown,
+                conversation.title
+            );
+
+            // Show success notification with link to the doc
+            this.showNotification('Google Doc created successfully!', 'success', {
+                link: docInfo.url,
+                linkText: 'Open Google Doc',
+                duration: 15000 // 15 seconds for user to click link
+            });
+
+        } catch (error) {
+            console.error('Export to Google Docs failed:', error);
+            this.showNotification(`Failed to create Google Doc: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Convert gdrive:// references for export (replace with placeholders or URLs)
+     */
+    convertGDriveReferencesForExport(markdown) {
+        // Replace image references with placeholders
+        // Format: ![alt text](gdrive://FILE_ID) -> [Image: alt text]
+        markdown = markdown.replace(/!\[([^\]]*)\]\(gdrive:\/\/[^\)]+\)/g, '[Image: $1]');
+
+        // Could also handle audio/file references if needed
+        return markdown;
     }
 
     /**
@@ -2758,14 +3245,85 @@ class ChatUI {
     }
 
     /**
-     * Show notification
+     * Show notification toast
+     * @param {string} message - The notification message
+     * @param {string} type - Type: 'success', 'error', 'warning', 'info'
+     * @param {Object} options - Optional: { link: 'url', linkText: 'text', duration: milliseconds }
      */
-    showNotification(message, type = 'info') {
-        // Simple console notification for MVP
+    showNotification(message, type = 'info', options = {}) {
         console.log(`[${type.toUpperCase()}] ${message}`);
 
-        // TODO: Implement toast notification UI
-        alert(message);
+        // Create notification element
+        const toast = document.createElement('div');
+        toast.className = `notification-toast ${type}`;
+
+        // Icon based on type
+        const icons = {
+            success: 'check_circle',
+            error: 'error',
+            warning: 'warning',
+            info: 'info'
+        };
+
+        const icon = icons[type] || icons['info'];
+
+        // Build notification HTML
+        let html = `
+            <div class="notification-icon">
+                <span class="material-icons">${icon}</span>
+            </div>
+            <div class="notification-content">
+                <div class="notification-message">${this.escapeHtml(message)}</div>
+        `;
+
+        // Add link if provided
+        if (options.link) {
+            const linkText = options.linkText || 'Open';
+            html += `
+                <a href="${this.escapeHtml(options.link)}" target="_blank" class="notification-link">
+                    <span class="material-icons">open_in_new</span>
+                    ${this.escapeHtml(linkText)}
+                </a>
+            `;
+        }
+
+        html += `
+            </div>
+            <button class="notification-close">
+                <span class="material-icons">close</span>
+            </button>
+        `;
+
+        toast.innerHTML = html;
+
+        // Add to container
+        this.notificationContainer.appendChild(toast);
+
+        // Close button handler
+        const closeBtn = toast.querySelector('.notification-close');
+        closeBtn.addEventListener('click', () => {
+            this.removeNotification(toast);
+        });
+
+        // Auto-dismiss after duration (default: 5 seconds, longer for links)
+        const duration = options.duration || (options.link ? 10000 : 5000);
+        setTimeout(() => {
+            this.removeNotification(toast);
+        }, duration);
+    }
+
+    /**
+     * Remove notification with animation
+     */
+    removeNotification(toast) {
+        if (!toast || !toast.parentNode) return;
+
+        toast.classList.add('removing');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300); // Match animation duration
     }
 
     /**

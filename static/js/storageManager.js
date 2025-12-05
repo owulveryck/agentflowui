@@ -470,4 +470,15 @@ class StorageManager {
 
         return stats;
     }
+
+    /**
+     * Export conversation to Google Docs
+     */
+    async exportToGoogleDocs(markdownContent, title) {
+        if (this.syncMode !== 'online') {
+            throw new Error('Google Drive not connected');
+        }
+
+        return await this.googleDrive.exportToGoogleDocs(markdownContent, title);
+    }
 }
