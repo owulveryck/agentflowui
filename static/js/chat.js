@@ -71,6 +71,10 @@ class ChatUI {
         this.folders = [];
         this.selectedFolderId = 'all'; // 'all' or folder id
 
+        // Tags state
+        this.availableTags = [];
+        this.selectedTagFilter = null; // null or tag name
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -474,6 +478,10 @@ class ChatUI {
         this.foldersList = document.getElementById('folders-list');
         this.addFolderBtn = document.getElementById('add-folder-btn');
         this.allFolderCount = document.getElementById('all-folder-count');
+
+        // Tags
+        this.tagsFilterList = document.getElementById('tags-filter-list');
+        this.clearTagFilterBtn = document.getElementById('clear-tag-filter');
     }
 
     /**
@@ -1031,6 +1039,15 @@ class ChatUI {
             }
         });
 
+        // Initialize tags
+        this.updateAvailableTags();
+        this.renderTagsFilter();
+
+        // Clear tag filter
+        this.clearTagFilterBtn.addEventListener('click', () => {
+            this.clearTagFilter();
+        });
+
         // Character/Token counter update
         this.userInput.addEventListener('input', () => {
             this.updateCharTokenCounter();
@@ -1388,6 +1405,14 @@ class ChatUI {
             return conv.folderId === this.selectedFolderId;
         });
 
+        // Filter by tag
+        if (this.selectedTagFilter) {
+            filtered = filtered.filter(id => {
+                const conv = this.conversations[id];
+                return conv.tags && conv.tags.includes(this.selectedTagFilter);
+            });
+        }
+
         // Filter by search query
         filtered = filtered.filter(id => {
             const conv = this.conversations[id];
@@ -1405,7 +1430,8 @@ class ChatUI {
         if (filtered.length === 0) {
             const folderName = this.selectedFolderId === 'all' ? '' :
                 `in ${this.folders.find(f => f.id === this.selectedFolderId)?.name || 'this folder'} `;
-            this.conversationsList.innerHTML = `<div class="empty-state">No conversations found ${folderName}<br><small>${this.searchQuery ? 'Try a different search' : 'Start a new conversation'}</small></div>`;
+            const tagName = this.selectedTagFilter ? `with tag "${this.selectedTagFilter}" ` : '';
+            this.conversationsList.innerHTML = `<div class="empty-state">No conversations found ${tagName}${folderName}<br><small>${this.searchQuery ? 'Try a different search' : 'Start a new conversation'}</small></div>`;
             return;
         }
 
@@ -1452,6 +1478,21 @@ class ChatUI {
                 const pinIcon = isPinned ? 'push_pin' : 'push_pin';
                 const pinTitle = isPinned ? 'Unpin' : 'Pin';
 
+                // Render tags
+                let tagsHtml = '';
+                if (conv.tags && conv.tags.length > 0) {
+                    tagsHtml = '<div class="conversation-tags">';
+                    conv.tags.forEach(tag => {
+                        tagsHtml += `
+                            <span class="tag-pill" data-tag="${this.escapeHtml(tag)}" data-conv-id="${id}">
+                                ${this.escapeHtml(tag)}
+                                <span class="material-icons tag-remove" title="Remove tag">close</span>
+                            </span>
+                        `;
+                    });
+                    tagsHtml += '</div>';
+                }
+
                 html += `
                     <div class="conversation-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''}" data-id="${id}">
                         <div class="conversation-content">
@@ -1460,12 +1501,16 @@ class ChatUI {
                                 ${this.escapeHtml(conv.title)}
                             </div>
                             <div class="conversation-preview">${this.escapeHtml(preview)}</div>
+                            ${tagsHtml}
                             <div class="conversation-meta">
                                 <span class="conversation-message-count">${messageCount} message${messageCount !== 1 ? 's' : ''}</span>
                                 <span class="conversation-time">${lastModified}</span>
                             </div>
                         </div>
                         <div class="conversation-actions">
+                            <button class="icon-btn-small add-tag-btn" data-id="${id}" title="Add tag">
+                                <span class="material-icons">label</span>
+                            </button>
                             <button class="icon-btn-small pin-conv-btn" data-id="${id}" title="${pinTitle}">
                                 <span class="material-icons">${pinIcon}</span>
                             </button>
@@ -1520,6 +1565,24 @@ class ChatUI {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.deleteConversation(btn.dataset.id);
+            });
+        });
+
+        // Tag management event listeners
+        document.querySelectorAll('.add-tag-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.addTagToConversation(btn.dataset.id);
+            });
+        });
+
+        document.querySelectorAll('.tag-remove').forEach(icon => {
+            icon.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const pill = icon.closest('.tag-pill');
+                const tag = pill.dataset.tag;
+                const convId = pill.dataset.convId;
+                this.removeTagFromConversation(convId, tag);
             });
         });
     }
@@ -4658,6 +4721,139 @@ class ChatUI {
             this.folders.find(f => f.id === folderId)?.name || 'Unknown';
 
         this.showNotification(`Conversation moved to "${folderName}"`, 'success');
+    }
+
+    /**
+     * Update available tags from all conversations
+     */
+    updateAvailableTags() {
+        const tagsSet = new Set();
+
+        Object.values(this.conversations).forEach(conv => {
+            if (conv.tags && Array.isArray(conv.tags)) {
+                conv.tags.forEach(tag => tagsSet.add(tag));
+            }
+        });
+
+        this.availableTags = Array.from(tagsSet).sort();
+    }
+
+    /**
+     * Render tags filter list
+     */
+    renderTagsFilter() {
+        if (this.availableTags.length === 0) {
+            this.tagsFilterList.innerHTML = '<div class="empty-state" style="font-size: 0.75rem; padding: var(--spacing-sm) 0;">No tags yet</div>';
+            return;
+        }
+
+        let html = '';
+        this.availableTags.forEach(tag => {
+            const count = this.getConversationCountForTag(tag);
+            const isActive = this.selectedTagFilter === tag;
+
+            html += `
+                <div class="tag-filter-pill ${isActive ? 'active' : ''}" data-tag="${this.escapeHtml(tag)}">
+                    ${this.escapeHtml(tag)}
+                    <span class="tag-count">(${count})</span>
+                </div>
+            `;
+        });
+
+        this.tagsFilterList.innerHTML = html;
+
+        // Add click listeners
+        document.querySelectorAll('.tag-filter-pill').forEach(pill => {
+            pill.addEventListener('click', () => {
+                const tag = pill.dataset.tag;
+                this.selectTagFilter(tag);
+            });
+        });
+    }
+
+    /**
+     * Select tag filter
+     */
+    selectTagFilter(tag) {
+        this.selectedTagFilter = tag;
+        this.renderTagsFilter();
+        this.renderConversationsList();
+
+        // Show clear button
+        this.clearTagFilterBtn.classList.remove('hidden');
+    }
+
+    /**
+     * Clear tag filter
+     */
+    clearTagFilter() {
+        this.selectedTagFilter = null;
+        this.renderTagsFilter();
+        this.renderConversationsList();
+
+        // Hide clear button
+        this.clearTagFilterBtn.classList.add('hidden');
+    }
+
+    /**
+     * Get conversation count for a tag
+     */
+    getConversationCountForTag(tag) {
+        return Object.values(this.conversations).filter(
+            conv => conv.tags && conv.tags.includes(tag)
+        ).length;
+    }
+
+    /**
+     * Add tag to conversation
+     */
+    addTagToConversation(conversationId) {
+        const conversation = this.conversations[conversationId];
+        if (!conversation) return;
+
+        const tag = prompt('Enter tag name:');
+        if (!tag || !tag.trim()) return;
+
+        const normalizedTag = tag.trim().toLowerCase();
+
+        // Initialize tags array if needed
+        if (!conversation.tags) {
+            conversation.tags = [];
+        }
+
+        // Check if tag already exists
+        if (conversation.tags.includes(normalizedTag)) {
+            this.showNotification('Tag already exists on this conversation', 'warning');
+            return;
+        }
+
+        conversation.tags.push(normalizedTag);
+        conversation.lastModified = Date.now();
+
+        this.saveConversations();
+        this.updateAvailableTags();
+        this.renderTagsFilter();
+        this.renderConversationsList();
+
+        this.showNotification(`Tag "${normalizedTag}" added`, 'success');
+    }
+
+    /**
+     * Remove tag from conversation
+     */
+    removeTagFromConversation(conversationId, tag) {
+        const conversation = this.conversations[conversationId];
+        if (!conversation || !conversation.tags) return;
+
+        conversation.tags = conversation.tags.filter(t => t !== tag);
+        conversation.lastModified = Date.now();
+
+        this.saveConversations();
+        this.updateAvailableTags();
+        this.renderTagsFilter();
+        this.renderConversationsList();
+
+        this.showNotification(`Tag "${tag}" removed`, 'success');
     }
 
     scrollToBottom() {
