@@ -191,11 +191,27 @@ class ChatUI {
                 this.createNewConversation();
             }
 
-            // Escape: Close all dropdowns and collapse menu on mobile
+            // ?: Show keyboard shortcuts help
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                // Only if not typing in input
+                if (document.activeElement !== this.userInput &&
+                    document.activeElement.tagName !== 'TEXTAREA' &&
+                    document.activeElement.tagName !== 'INPUT') {
+                    e.preventDefault();
+                    this.showKeyboardShortcutsHelp();
+                }
+            }
+
+            // Escape: Close all dropdowns, modals, and collapse menu on mobile
             if (e.key === 'Escape') {
                 this.modelDropdown.classList.add('hidden');
                 this.audioSourceDropdown.classList.add('hidden');
                 this.settingsDropdown.classList.add('hidden');
+
+                // Close keyboard shortcuts modal
+                if (this.keyboardShortcutsModal) {
+                    this.keyboardShortcutsModal.classList.add('hidden');
+                }
 
                 // On mobile, also collapse menu
                 if (window.innerWidth <= 768) {
@@ -332,6 +348,12 @@ class ChatUI {
 
         // Notification system
         this.notificationContainer = document.getElementById('notification-container');
+
+        // Keyboard shortcuts modal
+        this.keyboardShortcutsModal = document.getElementById('keyboard-shortcuts-modal');
+
+        // Dark mode toggle
+        this.darkModeToggle = document.getElementById('dark-mode-toggle');
     }
 
     /**
@@ -562,6 +584,62 @@ class ChatUI {
             e.target.value = '';
         });
 
+        // Drag and drop file upload
+        this.chatMessages.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.chatMessages.classList.add('drag-over');
+        });
+
+        this.chatMessages.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.chatMessages.classList.remove('drag-over');
+        });
+
+        this.chatMessages.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.chatMessages.classList.remove('drag-over');
+
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) {
+                this.handleFileSelection(files);
+                this.showNotification(`${files.length} file(s) added`, 'success');
+            }
+        });
+
+        // Paste images from clipboard
+        document.addEventListener('paste', (e) => {
+            // Only handle paste when not in input/textarea or when focused on message input
+            if (document.activeElement === this.userInput ||
+                (document.activeElement.tagName !== 'INPUT' &&
+                 document.activeElement.tagName !== 'TEXTAREA')) {
+
+                const items = e.clipboardData?.items;
+                if (!items) return;
+
+                const files = [];
+                for (let i = 0; i < items.length; i++) {
+                    if (items[i].kind === 'file') {
+                        const file = items[i].getAsFile();
+                        if (file) {
+                            files.push(file);
+                        }
+                    }
+                }
+
+                if (files.length > 0) {
+                    e.preventDefault();
+                    this.handleFileSelection(files);
+                    this.showNotification(`${files.length} file(s) pasted`, 'success');
+
+                    // Focus input after pasting files
+                    this.userInput.focus();
+                }
+            }
+        });
+
         // Side menu toggle
         this.menuToggle.addEventListener('click', () => {
             this.sideMenu.classList.toggle('collapsed');
@@ -703,6 +781,34 @@ class ChatUI {
             this.clearSearchBtn.classList.add('hidden');
             this.renderConversationsList();
         });
+
+        // Keyboard shortcuts modal close
+        if (this.keyboardShortcutsModal) {
+            const modalClose = this.keyboardShortcutsModal.querySelector('.modal-close');
+            const modalBackdrop = this.keyboardShortcutsModal.querySelector('.modal-backdrop');
+
+            if (modalClose) {
+                modalClose.addEventListener('click', () => {
+                    this.keyboardShortcutsModal.classList.add('hidden');
+                });
+            }
+
+            if (modalBackdrop) {
+                modalBackdrop.addEventListener('click', () => {
+                    this.keyboardShortcutsModal.classList.add('hidden');
+                });
+            }
+        }
+
+        // Dark mode toggle
+        if (this.darkModeToggle) {
+            this.darkModeToggle.addEventListener('click', () => {
+                this.toggleDarkMode();
+            });
+
+            // Initialize dark mode from localStorage or system preference
+            this.initializeDarkMode();
+        }
     }
 
     /**
@@ -1423,6 +1529,20 @@ class ChatUI {
             });
         });
 
+        document.querySelectorAll('.copy-msg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const index = parseInt(btn.dataset.index);
+                this.copyMessage(index);
+            });
+        });
+
+        document.querySelectorAll('.regenerate-msg-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const index = parseInt(btn.dataset.index);
+                this.regenerateMessage(index);
+            });
+        });
+
         // Add event listeners for audio play buttons
         document.querySelectorAll('.audio-play-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -1492,6 +1612,9 @@ class ChatUI {
                     ${this.renderMessageContent(content, msg.isTyping)}
                 </div>
                 <div class="message-actions">
+                    <button class="action-btn copy-msg-btn" data-index="${index}" title="Copy message">
+                        <span class="material-icons">content_copy</span>
+                    </button>
                     <button class="action-btn edit-msg-btn" data-index="${index}" title="Edit">
                         <span class="material-icons">edit</span>
                     </button>
@@ -1499,7 +1622,11 @@ class ChatUI {
                         <button class="action-btn replay-msg-btn" data-index="${index}" title="Replay from here">
                             <span class="material-icons">replay</span>
                         </button>
-                    ` : ''}
+                    ` : `
+                        <button class="action-btn regenerate-msg-btn" data-index="${index}" title="Regenerate response">
+                            <span class="material-icons">refresh</span>
+                        </button>
+                    `}
                 </div>
                 ${msg.timestamp ? `<div class="message-time">${new Date(msg.timestamp).toLocaleTimeString()}</div>` : ''}
             </div>
@@ -1897,6 +2024,51 @@ class ChatUI {
         this.saveConversations();
 
         // Regenerate assistant response
+        await this.getAssistantResponse();
+    }
+
+    /**
+     * Copy message content to clipboard
+     */
+    async copyMessage(index) {
+        const message = this.messages[index];
+        if (!message) return;
+
+        let textToCopy = '';
+
+        // Extract text from message content
+        if (typeof message.content === 'string') {
+            textToCopy = message.content;
+        } else if (Array.isArray(message.content)) {
+            // For multimodal content, extract text parts
+            const textParts = message.content
+                .filter(item => item.type === 'text')
+                .map(item => item.text);
+            textToCopy = textParts.join('\n\n');
+        }
+
+        try {
+            await navigator.clipboard.writeText(textToCopy);
+            this.showNotification('Message copied to clipboard', 'success');
+        } catch (error) {
+            console.error('Failed to copy message:', error);
+            this.showNotification('Failed to copy message', 'error');
+        }
+    }
+
+    /**
+     * Regenerate assistant response
+     */
+    async regenerateMessage(index) {
+        const message = this.messages[index];
+        if (!message || message.role !== 'assistant') return;
+
+        // Remove this assistant message
+        this.messages.splice(index, 1);
+        this.renderMessages();
+        this.saveConversations();
+
+        // Regenerate response
         await this.getAssistantResponse();
     }
 
@@ -3349,6 +3521,66 @@ class ChatUI {
             'audio/webm; codecs=opus': 'webm'
         };
         return extensions[mimeType] || 'audio';
+    }
+
+    /**
+     * Show keyboard shortcuts help modal
+     */
+    showKeyboardShortcutsHelp() {
+        if (!this.keyboardShortcutsModal) {
+            console.warn('Keyboard shortcuts modal not found');
+            return;
+        }
+
+        this.keyboardShortcutsModal.classList.remove('hidden');
+    }
+
+    /**
+     * Initialize dark mode from storage or system preference
+     */
+    initializeDarkMode() {
+        const savedMode = localStorage.getItem('darkMode');
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+        if (savedMode === 'dark' || (savedMode === null && systemPrefersDark)) {
+            document.body.classList.add('dark-mode');
+            this.updateDarkModeIcon(true);
+        }
+
+        // Listen for system preference changes
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            if (localStorage.getItem('darkMode') === null) {
+                if (e.matches) {
+                    document.body.classList.add('dark-mode');
+                    this.updateDarkModeIcon(true);
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    this.updateDarkModeIcon(false);
+                }
+            }
+        });
+    }
+
+    /**
+     * Toggle dark mode
+     */
+    toggleDarkMode() {
+        const isDark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('darkMode', isDark ? 'dark' : 'light');
+        this.updateDarkModeIcon(isDark);
+        this.showNotification(`${isDark ? 'Dark' : 'Light'} mode enabled`, 'success');
+    }
+
+    /**
+     * Update dark mode toggle icon
+     */
+    updateDarkModeIcon(isDark) {
+        if (this.darkModeToggle) {
+            const icon = this.darkModeToggle.querySelector('.material-icons');
+            if (icon) {
+                icon.textContent = isDark ? 'light_mode' : 'dark_mode';
+            }
+        }
     }
 
     scrollToBottom() {

@@ -163,6 +163,11 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Dark Mode Toggle -->
+                    <button id="dark-mode-toggle" class="icon-btn" title="Toggle dark mode">
+                        <span class="material-icons">dark_mode</span>
+                    </button>
                 </div>
             </header>
 
@@ -222,6 +227,66 @@
 
     <!-- Notification Toast Container -->
     <div id="notification-container" class="notification-container"></div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div id="keyboard-shortcuts-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Keyboard Shortcuts</h2>
+                <button class="modal-close">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="shortcuts-grid">
+                    <div class="shortcuts-section">
+                        <h3>Navigation</h3>
+                        <div class="shortcut-item">
+                            <kbd>Cmd/Ctrl</kbd> + <kbd>B</kbd>
+                            <span>Toggle side menu</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Cmd/Ctrl</kbd> + <kbd>K</kbd>
+                            <span>Focus search</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Cmd/Ctrl</kbd> + <kbd>N</kbd>
+                            <span>New chat</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Esc</kbd>
+                            <span>Close dropdowns/menu</span>
+                        </div>
+                    </div>
+
+                    <div class="shortcuts-section">
+                        <h3>Messaging</h3>
+                        <div class="shortcut-item">
+                            <kbd>Enter</kbd>
+                            <span>Send message</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Shift</kbd> + <kbd>Enter</kbd>
+                            <span>New line</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Cmd/Ctrl</kbd> + <kbd>Enter</kbd>
+                            <span>Save edit</span>
+                        </div>
+                    </div>
+
+                    <div class="shortcuts-section">
+                        <h3>Help</h3>
+                        <div class="shortcut-item">
+                            <kbd>?</kbd>
+                            <span>Show this help</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Scripts -->
     <script src="./static/js/config.js"></script>

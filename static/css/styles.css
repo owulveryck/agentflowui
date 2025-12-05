@@ -79,6 +79,58 @@
 }
 
 /* ============================================
+   Dark Mode Variables
+   ============================================ */
+body.dark-mode {
+    /* Dark backgrounds */
+    --bg-primary: #1a1a2e;
+    --bg-secondary: #16213e;
+    --text-primary: #e4e4e7;
+    --text-secondary: #a1a1aa;
+    --border-color: #27272a;
+
+    /* Adjust navy for dark mode - lighter variants */
+    --navy-blue: #7c8db5;
+    --navy-90: #8899c2;
+    --navy-80: #93a4ce;
+    --navy-70: #9eb0da;
+    --navy-60: #aabce6;
+    --navy-50: #b5c7f1;
+    --navy-40: #c1d3fd;
+    --navy-30: #d0ddff;
+    --navy-20: #e0e9ff;
+    --navy-10: #f0f5ff;
+
+    /* Keep turquoise vibrant in dark mode */
+    --turquoise: #00e5f0;
+    --turquoise-90: #1de8f3;
+    --turquoise-80: #3aebf5;
+    --turquoise-70: #57eef8;
+    --turquoise-60: #74f1fa;
+    --turquoise-50: #91f4fc;
+    --turquoise-40: #aef7fd;
+    --turquoise-30: #cbfafe;
+    --turquoise-20: #e8fdff;
+    --turquoise-10: #f4feff;
+
+    /* Semantic colors - adjusted for dark mode */
+    --success-color: #22c55e;
+    --error-color: #f87171;
+    --warning-color: #fbbf24;
+    --info-color: var(--turquoise);
+
+    /* Dark shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+}
+
+/* Smooth transition for dark mode */
+body {
+    transition: background-color var(--transition-slow), color var(--transition-slow);
+}
+
+/* ============================================
    Reset and Base Styles
    ============================================ */
 * {
@@ -617,6 +669,29 @@ body {
     display: flex;
     flex-direction: column;
     gap: var(--spacing-md);
+    position: relative;
+    transition: background-color var(--transition-normal);
+}
+
+/* Drag and Drop Visual Feedback */
+.chat-messages.drag-over::before {
+    content: 'Drop files here to attach';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 210, 221, 0.1);
+    border: 3px dashed var(--turquoise);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--turquoise);
+    z-index: 100;
+    pointer-events: none;
 }
 
 .message {
@@ -2118,6 +2193,136 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
     background-color: var(--navy-40);
+}
+
+/* ============================================
+   Modal Styles
+   ============================================ */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    transition: opacity var(--transition-normal);
+}
+
+.modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(14, 35, 86, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    position: relative;
+    background-color: var(--white);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.modal-header {
+    padding: var(--spacing-lg);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: var(--navy-blue);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--spacing-xs);
+    color: var(--navy-60);
+    transition: color var(--transition-fast);
+    border-radius: var(--radius-sm);
+}
+
+.modal-close:hover {
+    color: var(--navy-blue);
+    background-color: var(--navy-10);
+}
+
+.modal-body {
+    padding: var(--spacing-lg);
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Keyboard Shortcuts Styles */
+.shortcuts-grid {
+    display: grid;
+    gap: var(--spacing-lg);
+}
+
+.shortcuts-section h3 {
+    margin: 0 0 var(--spacing-md) 0;
+    font-size: 1rem;
+    color: var(--navy-blue);
+    font-weight: 600;
+}
+
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) 0;
+}
+
+.shortcut-item kbd {
+    background-color: var(--navy-10);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 0 0 var(--navy-20);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-family: monospace;
+    font-size: 0.875rem;
+    color: var(--navy-blue);
+    min-width: 2rem;
+    text-align: center;
+}
+
+.shortcut-item span {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
 }
 
 /* ============================================
