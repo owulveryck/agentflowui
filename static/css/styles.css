@@ -2882,6 +2882,15 @@ body {
    Mobile Responsive
    ============================================ */
 @media (max-width: 768px) {
+    /* Increase spacing for touch targets */
+    :root {
+        --spacing-xs: 6px;
+        --spacing-sm: 12px;
+        --spacing-md: 20px;
+        --spacing-lg: 28px;
+        --spacing-xl: 36px;
+    }
+
     .side-menu {
         position: fixed;
         top: 0;
@@ -2890,37 +2899,213 @@ body {
         z-index: var(--z-menu);
         transform: translateX(-100%);
         box-shadow: var(--shadow-lg);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .side-menu:not(.collapsed) {
         transform: translateX(0);
     }
 
+    /* Mobile overlay when menu is open */
+    .mobile-menu-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: calc(var(--z-menu) - 1);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+    }
+
+    .mobile-menu-overlay.visible {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
     .message {
-        max-width: 90%;
+        max-width: 95%;
     }
 
     .header-controls {
         flex-wrap: wrap;
+        gap: var(--spacing-xs);
     }
 
+    /* Increase touch target sizes */
     .btn {
-        font-size: 0.75rem;
-        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: 0.875rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+        min-height: 44px; /* iOS recommended minimum */
     }
 
     .btn .material-icons {
-        font-size: 18px;
+        font-size: 20px;
+    }
+
+    .icon-btn {
+        min-width: 44px;
+        min-height: 44px;
+        width: 44px;
+        height: 44px;
+    }
+
+    .icon-btn .material-icons {
+        font-size: 24px;
+    }
+
+    .icon-btn-small {
+        min-width: 36px;
+        min-height: 36px;
+        width: 36px;
+        height: 36px;
+    }
+
+    .icon-btn-small .material-icons {
+        font-size: 20px;
     }
 
     /* Make new chat button more compact on mobile */
     #new-chat-btn {
-        padding: var(--spacing-xs) var(--spacing-sm);
-        font-size: 0.75rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.875rem;
+        min-height: 44px;
     }
 
     #new-chat-btn .material-icons {
-        font-size: 18px;
+        font-size: 20px;
+    }
+
+    /* Conversation items - larger touch targets */
+    .conversation-item {
+        padding: var(--spacing-md) var(--spacing-md);
+        margin-bottom: var(--spacing-sm);
+        min-height: 60px;
+    }
+
+    /* Folder items */
+    .folder-item {
+        padding: var(--spacing-md);
+        min-height: 48px;
+    }
+
+    /* Input area improvements */
+    #user-input {
+        font-size: 16px; /* Prevents iOS zoom on focus */
+        padding: var(--spacing-md);
+        min-height: 44px;
+    }
+
+    /* Modal improvements */
+    .modal-content {
+        width: 95%;
+        max-height: 90vh;
+        margin: var(--spacing-md);
+    }
+
+    /* Trim modal on mobile */
+    .trim-modal-content {
+        max-width: 95%;
+    }
+
+    .trim-waveform {
+        height: 100px;
+    }
+
+    .trim-handle::before {
+        width: 30px; /* Larger touch target */
+        height: 50px;
+    }
+
+    /* Search input */
+    .conversation-search {
+        font-size: 16px; /* Prevents iOS zoom */
+        padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 40px;
+        min-height: 44px;
+    }
+
+    /* Dropdown improvements */
+    .dropdown {
+        max-width: 90vw;
+    }
+
+    .dropdown-item {
+        padding: var(--spacing-md);
+        min-height: 48px;
+    }
+
+    /* Audio player controls */
+    .audio-play-btn {
+        width: 52px;
+        height: 52px;
+        min-width: 52px;
+        min-height: 52px;
+    }
+
+    /* Message actions */
+    .message-actions {
+        opacity: 1; /* Always visible on touch devices */
+    }
+
+    .action-btn {
+        min-height: 36px;
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    /* File preview */
+    .remove-file-btn {
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .trim-file-btn {
+        min-height: 36px;
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    /* Chat messages padding */
+    .chat-messages {
+        padding: var(--spacing-md);
+    }
+
+    /* Reduce notification width on mobile */
+    .notification-toast {
+        min-width: auto;
+        width: calc(100vw - 32px);
+    }
+}
+
+/* Landscape mobile optimizations */
+@media (max-width: 896px) and (orientation: landscape) {
+    .side-menu {
+        width: 280px;
+    }
+
+    .modal-content {
+        max-height: 85vh;
+    }
+
+    .chat-messages {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+}
+
+/* Small mobile devices */
+@media (max-width: 375px) {
+    .side-menu {
+        width: 85vw;
+        max-width: 300px;
+    }
+
+    .message {
+        max-width: 100%;
+    }
+
+    .file-preview-item {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 

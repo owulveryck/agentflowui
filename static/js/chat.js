@@ -426,7 +426,15 @@ class ChatUI {
         // Side menu
         this.menuToggle = document.getElementById('menu-toggle');
         this.sideMenu = document.getElementById('side-menu');
+        this.mobileMenuOverlay = document.getElementById('mobile-menu-overlay');
         this.newChatBtn = document.getElementById('new-chat-btn');
+
+        // Touch/swipe state
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.touchCurrentX = 0;
+        this.touchCurrentY = 0;
+        this.isSwiping = false;
         this.conversationsList = document.getElementById('conversations-list');
         this.systemPromptTextarea = document.getElementById('system-prompt');
 
@@ -819,8 +827,18 @@ class ChatUI {
 
         // Side menu toggle
         this.menuToggle.addEventListener('click', () => {
-            this.sideMenu.classList.toggle('collapsed');
+            this.toggleSideMenu();
         });
+
+        // Mobile menu overlay click
+        if (this.mobileMenuOverlay) {
+            this.mobileMenuOverlay.addEventListener('click', () => {
+                this.closeSideMenu();
+            });
+        }
+
+        // Initialize swipe gestures
+        this.initializeSwipeGestures();
 
         this.newChatBtn.addEventListener('click', () => {
             this.createNewConversation();
@@ -5648,6 +5666,150 @@ class ChatUI {
         this.exitBulkMode();
 
         this.showNotification(`${count} conversation(s) deleted`, 'success');
+    }
+
+    /**
+     * Toggle side menu
+     */
+    toggleSideMenu() {
+        const isCollapsed = this.sideMenu.classList.contains('collapsed');
+        if (isCollapsed) {
+            this.openSideMenu();
+        } else {
+            this.closeSideMenu();
+        }
+    }
+
+    /**
+     * Open side menu
+     */
+    openSideMenu() {
+        this.sideMenu.classList.remove('collapsed');
+        if (this.mobileMenuOverlay && window.innerWidth <= 768) {
+            this.mobileMenuOverlay.classList.add('visible');
+        }
+    }
+
+    /**
+     * Close side menu
+     */
+    closeSideMenu() {
+        this.sideMenu.classList.add('collapsed');
+        if (this.mobileMenuOverlay) {
+            this.mobileMenuOverlay.classList.remove('visible');
+        }
+    }
+
+    /**
+     * Initialize swipe gestures for mobile
+     */
+    initializeSwipeGestures() {
+        // Only enable on mobile/tablet
+        if ('ontouchstart' in window) {
+            // Swipe from left edge to open menu
+            document.addEventListener('touchstart', (e) => {
+                this.touchStartX = e.touches[0].clientX;
+                this.touchStartY = e.touches[0].clientY;
+
+                // Only start swipe if touch starts near left edge
+                if (this.touchStartX < 20 && this.sideMenu.classList.contains('collapsed')) {
+                    this.isSwiping = true;
+                }
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!this.isSwiping) return;
+
+                this.touchCurrentX = e.touches[0].clientX;
+                this.touchCurrentY = e.touches[0].clientY;
+
+                const diffX = this.touchCurrentX - this.touchStartX;
+                const diffY = this.touchCurrentY - this.touchStartY;
+
+                // Only swipe if horizontal movement is greater than vertical
+                if (Math.abs(diffX) > Math.abs(diffY)) {
+                    // Prevent default scrolling
+                    if (diffX > 0) {
+                        e.preventDefault();
+                    }
+
+                    // Update menu position during swipe
+                    if (diffX > 0 && diffX < 300) {
+                        const percent = Math.min(100, (diffX / 300) * 100);
+                        this.sideMenu.style.transform = `translateX(-${100 - percent}%)`;
+                        if (this.mobileMenuOverlay) {
+                            this.mobileMenuOverlay.style.opacity = percent / 100;
+                            this.mobileMenuOverlay.style.pointerEvents = 'auto';
+                        }
+                    }
+                }
+            }, { passive: false });
+
+            document.addEventListener('touchend', (e) => {
+                if (!this.isSwiping) return;
+
+                const diffX = this.touchCurrentX - this.touchStartX;
+
+                // If swiped more than 150px, open menu
+                if (diffX > 150) {
+                    this.openSideMenu();
+                    this.sideMenu.style.transform = '';
+                } else {
+                    // Reset menu position
+                    this.sideMenu.style.transform = '';
+                    if (this.mobileMenuOverlay) {
+                        this.mobileMenuOverlay.style.opacity = '';
+                        this.mobileMenuOverlay.style.pointerEvents = '';
+                    }
+                }
+
+                this.isSwiping = false;
+            }, { passive: true });
+
+            // Swipe from right to close menu (when menu is open)
+            this.sideMenu.addEventListener('touchstart', (e) => {
+                if (!this.sideMenu.classList.contains('collapsed')) {
+                    this.touchStartX = e.touches[0].clientX;
+                    this.touchStartY = e.touches[0].clientY;
+                    // Only start if touch is on the menu itself
+                    if (this.touchStartX < 300) {
+                        this.isSwiping = true;
+                    }
+                }
+            }, { passive: true });
+
+            this.sideMenu.addEventListener('touchmove', (e) => {
+                if (!this.isSwiping || this.sideMenu.classList.contains('collapsed')) return;
+
+                this.touchCurrentX = e.touches[0].clientX;
+                const diffX = this.touchCurrentX - this.touchStartX;
+
+                // Only track leftward swipes
+                if (diffX < 0) {
+                    const percent = Math.max(0, 100 + (diffX / 300) * 100);
+                    this.sideMenu.style.transform = `translateX(-${100 - percent}%)`;
+                    if (this.mobileMenuOverlay) {
+                        this.mobileMenuOverlay.style.opacity = percent / 100;
+                    }
+                }
+            }, { passive: false });
+
+            this.sideMenu.addEventListener('touchend', (e) => {
+                if (!this.isSwiping) return;
+
+                const diffX = this.touchCurrentX - this.touchStartX;
+
+                // If swiped left more than 100px, close menu
+                if (diffX < -100) {
+                    this.closeSideMenu();
+                }
+
+                // Reset menu position
+                this.sideMenu.style.transform = '';
+
+                this.isSwiping = false;
+            }, { passive: true });
+        }
     }
 
     /**
