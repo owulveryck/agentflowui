@@ -647,33 +647,33 @@ class ChatUI {
                                     };
                                 }
                             }
-                            // Restore Google Drive reference for documents if it was cached
-                            if (item.type === 'document' && item.document) {
-                                if (item.document._gdriveUrl) {
+                            // Restore Google Drive reference for files (PDFs) if it was cached
+                            if (item.type === 'file' && item.file) {
+                                if (item.file._gdriveUrl) {
                                     // Restore original gdrive:// URL
                                     return {
-                                        type: 'document',
-                                        document: {
-                                            data: item.document._gdriveUrl,
-                                            filename: item.document.filename
+                                        type: 'file',
+                                        file: {
+                                            file_data: item.file._gdriveUrl,
+                                            filename: item.file.filename
                                         }
                                     };
-                                } else if (item.document._uploadPending) {
+                                } else if (item.file._uploadPending) {
                                     // Upload still pending - don't save (will be updated when upload completes)
                                     return {
-                                        type: 'document',
-                                        document: {
-                                            data: '[Document upload in progress - not saved]',
-                                            filename: item.document.filename
+                                        type: 'file',
+                                        file: {
+                                            file_data: '[File upload in progress - not saved]',
+                                            filename: item.file.filename
                                         }
                                     };
-                                } else if (item.document.data && !item.document.data.startsWith('gdrive://')) {
+                                } else if (item.file.file_data && !item.file.file_data.startsWith('gdrive://')) {
                                     // Remove inline base64 data
                                     return {
-                                        type: 'document',
-                                        document: {
-                                            data: '[Document data not saved to conserve storage]',
-                                            filename: item.document.filename
+                                        type: 'file',
+                                        file: {
+                                            file_data: '[File data not saved to conserve storage]',
+                                            filename: item.file.filename
                                         }
                                     };
                                 }
@@ -981,17 +981,17 @@ class ChatUI {
                         }
                     }
 
-                    // Download and cache Google Drive documents
-                    if (item.type === 'document' && item.document && item.document.data.startsWith('gdrive://')) {
+                    // Download and cache Google Drive files (PDFs)
+                    if (item.type === 'file' && item.file && item.file.file_data.startsWith('gdrive://')) {
                         try {
-                            const gdriveUrl = item.document.data;
+                            const gdriveUrl = item.file.file_data;
                             const dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
                             // Store both: base64 for display/API, gdrive:// for storage
-                            msg.content[j].document._gdriveUrl = gdriveUrl;
-                            msg.content[j].document.data = dataURL;
-                            console.log('Cached Google Drive document');
+                            msg.content[j].file._gdriveUrl = gdriveUrl;
+                            msg.content[j].file.file_data = dataURL;
+                            console.log('Cached Google Drive file');
                         } catch (error) {
-                            console.error('Failed to cache Google Drive document:', error);
+                            console.error('Failed to cache Google Drive file:', error);
                         }
                     }
                 }
@@ -1096,10 +1096,10 @@ class ChatUI {
                     } else {
                         html += `<div class="message-file-placeholder"><span class="material-icons">audiotrack</span> <em>Audio not available</em></div>`;
                     }
-                } else if (item.type === 'document' && item.document) {
-                    const data = item.document.data;
-                    const filename = item.document.filename || 'document.pdf';
-                    if (data && data !== '[Document data not saved to conserve storage]' && data !== '[Document upload in progress - not saved]') {
+                } else if (item.type === 'file' && item.file) {
+                    const data = item.file.file_data;
+                    const filename = item.file.filename || 'document.pdf';
+                    if (data && data !== '[File data not saved to conserve storage]' && data !== '[File upload in progress - not saved]') {
                         html += `<div class="message-document">
                             <div class="document-icon">
                                 <span class="material-icons">picture_as_pdf</span>
@@ -1113,7 +1113,7 @@ class ChatUI {
                             </div>
                         </div>`;
                     } else {
-                        html += `<div class="message-file-placeholder"><span class="material-icons">picture_as_pdf</span> <em>Document not available</em></div>`;
+                        html += `<div class="message-file-placeholder"><span class="material-icons">picture_as_pdf</span> <em>File not available</em></div>`;
                     }
                 }
             }
@@ -1488,18 +1488,18 @@ class ChatUI {
                     messageContent.push(imageData);
                 } else if (file.fileType === 'application/pdf') {
                     const pdfData = {
-                        type: 'document',
-                        document: {
-                            data: dataURL,
+                        type: 'file',
+                        file: {
+                            file_data: dataURL,
                             filename: file.fileName
                         }
                     };
                     // Keep original gdrive URL for storage if available
                     if (gdriveUrl) {
-                        pdfData.document._gdriveUrl = gdriveUrl;
+                        pdfData.file._gdriveUrl = gdriveUrl;
                     } else if (file.uploading) {
                         // Mark for future update when upload completes
-                        pdfData.document._uploadPending = file;
+                        pdfData.file._uploadPending = file;
                     }
                     messageContent.push(pdfData);
                 } else if (file.fileType.startsWith('audio/')) {
@@ -2085,10 +2085,10 @@ class ChatUI {
                         delete item.audio._uploadPending;
                         updated = true;
                     }
-                    // Update documents
-                    if (item.type === 'document' && item.document?._uploadPending === fileObj) {
-                        item.document._gdriveUrl = gdriveUrl;
-                        delete item.document._uploadPending;
+                    // Update files (PDFs)
+                    if (item.type === 'file' && item.file?._uploadPending === fileObj) {
+                        item.file._gdriveUrl = gdriveUrl;
+                        delete item.file._uploadPending;
                         updated = true;
                     }
                 }
