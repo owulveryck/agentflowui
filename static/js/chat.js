@@ -67,6 +67,10 @@ class ChatUI {
         // Templates state
         this.templates = [];
 
+        // Folders state
+        this.folders = [];
+        this.selectedFolderId = 'all'; // 'all' or folder id
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -465,6 +469,11 @@ class ChatUI {
         // Character/Token counter
         this.charCountValue = document.getElementById('char-count-value');
         this.tokenCountValue = document.getElementById('token-count-value');
+
+        // Folders
+        this.foldersList = document.getElementById('folders-list');
+        this.addFolderBtn = document.getElementById('add-folder-btn');
+        this.allFolderCount = document.getElementById('all-folder-count');
     }
 
     /**
@@ -1005,6 +1014,23 @@ class ChatUI {
         // Load templates from localStorage
         this.loadTemplates();
 
+        // Load folders from localStorage
+        this.loadFolders();
+
+        // Folder management
+        this.addFolderBtn.addEventListener('click', () => {
+            this.createFolder();
+        });
+
+        // Folder selection (delegated)
+        document.addEventListener('click', (e) => {
+            const folderItem = e.target.closest('.folder-item');
+            if (folderItem && !e.target.closest('.folder-action-btn')) {
+                const folderId = folderItem.dataset.folder;
+                this.selectFolder(folderId);
+            }
+        });
+
         // Character/Token counter update
         this.userInput.addEventListener('input', () => {
             this.updateCharTokenCounter();
@@ -1276,6 +1302,7 @@ class ChatUI {
         this.renderMessages();
         this.renderConversationsList();
         this.saveConversations();
+        this.updateFolderCounts();
 
         // Auto-collapse menu
         this.sideMenu.classList.add('collapsed');
@@ -1331,6 +1358,7 @@ class ChatUI {
         }
 
         this.renderConversationsList();
+        this.updateFolderCounts();
     }
 
     /**
@@ -1347,8 +1375,21 @@ class ChatUI {
             return;
         }
 
+        // Filter by folder
+        let filtered = conversationIds.filter(id => {
+            const conv = this.conversations[id];
+
+            // If "All Conversations" is selected, show all
+            if (this.selectedFolderId === 'all') {
+                return true;
+            }
+
+            // Otherwise, only show conversations in the selected folder
+            return conv.folderId === this.selectedFolderId;
+        });
+
         // Filter by search query
-        const filtered = conversationIds.filter(id => {
+        filtered = filtered.filter(id => {
             const conv = this.conversations[id];
             if (!this.searchQuery) return true;
 
@@ -1362,7 +1403,9 @@ class ChatUI {
         });
 
         if (filtered.length === 0) {
-            this.conversationsList.innerHTML = '<div class="empty-state">No conversations found<br><small>Try a different search</small></div>';
+            const folderName = this.selectedFolderId === 'all' ? '' :
+                `in ${this.folders.find(f => f.id === this.selectedFolderId)?.name || 'this folder'} `;
+            this.conversationsList.innerHTML = `<div class="empty-state">No conversations found ${folderName}<br><small>${this.searchQuery ? 'Try a different search' : 'Start a new conversation'}</small></div>`;
             return;
         }
 
@@ -4337,6 +4380,284 @@ class ChatUI {
 
         this.charCountValue.textContent = charCount.toLocaleString();
         this.tokenCountValue.textContent = `~${estimatedTokens.toLocaleString()}`;
+    }
+
+    /**
+     * Load folders from localStorage
+     */
+    loadFolders() {
+        try {
+            const saved = localStorage.getItem('conversation_folders');
+            if (saved) {
+                this.folders = JSON.parse(saved);
+            } else {
+                this.folders = [];
+            }
+            this.renderFolders();
+        } catch (error) {
+            console.error('Failed to load folders:', error);
+            this.folders = [];
+        }
+    }
+
+    /**
+     * Save folders to localStorage
+     */
+    saveFolders() {
+        try {
+            localStorage.setItem('conversation_folders', JSON.stringify(this.folders));
+        } catch (error) {
+            console.error('Failed to save folders:', error);
+            this.showNotification('Failed to save folders', 'error');
+        }
+    }
+
+    /**
+     * Render folders list
+     */
+    renderFolders() {
+        if (this.folders.length === 0) {
+            this.foldersList.innerHTML = '';
+            this.updateFolderCounts();
+            return;
+        }
+
+        let html = '';
+        this.folders.forEach(folder => {
+            const count = this.getConversationCountForFolder(folder.id);
+            const isActive = this.selectedFolderId === folder.id;
+
+            html += `
+                <div class="folder-item ${isActive ? 'active' : ''}" data-folder="${folder.id}" draggable="false">
+                    <span class="material-icons folder-icon">${folder.icon || 'folder'}</span>
+                    <span class="folder-name">${this.escapeHtml(folder.name)}</span>
+                    <span class="folder-count">${count}</span>
+                    <div class="folder-actions">
+                        <button class="folder-action-btn rename-folder-btn" data-folder-id="${folder.id}" title="Rename">
+                            <span class="material-icons">edit</span>
+                        </button>
+                        <button class="folder-action-btn delete-folder-btn" data-folder-id="${folder.id}" title="Delete">
+                            <span class="material-icons">delete</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        this.foldersList.innerHTML = html;
+
+        // Add event listeners for folder actions
+        document.querySelectorAll('.rename-folder-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.renameFolder(btn.dataset.folderId);
+            });
+        });
+
+        document.querySelectorAll('.delete-folder-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteFolder(btn.dataset.folderId);
+            });
+        });
+
+        // Enable drag-and-drop for folders
+        this.setupFolderDragDrop();
+
+        // Update folder counts
+        this.updateFolderCounts();
+    }
+
+    /**
+     * Create new folder
+     */
+    createFolder() {
+        const name = prompt('Enter folder name:');
+        if (!name || !name.trim()) return;
+
+        const folder = {
+            id: `folder_${Date.now()}`,
+            name: name.trim(),
+            icon: 'folder',
+            createdAt: Date.now()
+        };
+
+        this.folders.push(folder);
+        this.saveFolders();
+        this.renderFolders();
+        this.showNotification(`Folder "${name}" created`, 'success');
+    }
+
+    /**
+     * Rename folder
+     */
+    renameFolder(folderId) {
+        const folder = this.folders.find(f => f.id === folderId);
+        if (!folder) return;
+
+        const newName = prompt('Enter new folder name:', folder.name);
+        if (!newName || !newName.trim()) return;
+
+        folder.name = newName.trim();
+        this.saveFolders();
+        this.renderFolders();
+        this.showNotification(`Folder renamed to "${newName}"`, 'success');
+    }
+
+    /**
+     * Delete folder
+     */
+    deleteFolder(folderId) {
+        const folder = this.folders.find(f => f.id === folderId);
+        if (!folder) return;
+
+        // Check if folder has conversations
+        const conversationsInFolder = Object.values(this.conversations).filter(
+            conv => conv.folderId === folderId
+        );
+
+        let confirmMsg = `Delete folder "${folder.name}"?`;
+        if (conversationsInFolder.length > 0) {
+            confirmMsg += `\n\nThis folder contains ${conversationsInFolder.length} conversation(s). They will be moved to "All Conversations".`;
+        }
+
+        if (!confirm(confirmMsg)) return;
+
+        // Move conversations out of folder
+        conversationsInFolder.forEach(conv => {
+            delete conv.folderId;
+        });
+
+        // Remove folder
+        this.folders = this.folders.filter(f => f.id !== folderId);
+        this.saveFolders();
+        this.saveConversations();
+
+        // If this folder was selected, switch to "All"
+        if (this.selectedFolderId === folderId) {
+            this.selectFolder('all');
+        }
+
+        this.renderFolders();
+        this.renderConversationsList();
+        this.showNotification(`Folder "${folder.name}" deleted`, 'success');
+    }
+
+    /**
+     * Select folder (filter conversations)
+     */
+    selectFolder(folderId) {
+        this.selectedFolderId = folderId;
+
+        // Update active state
+        document.querySelectorAll('.folder-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.folder === folderId);
+        });
+
+        // Re-render conversations list with filter
+        this.renderConversationsList();
+    }
+
+    /**
+     * Get conversation count for a folder
+     */
+    getConversationCountForFolder(folderId) {
+        if (folderId === 'all') {
+            return Object.keys(this.conversations).length;
+        }
+
+        return Object.values(this.conversations).filter(
+            conv => conv.folderId === folderId
+        ).length;
+    }
+
+    /**
+     * Update folder counts
+     */
+    updateFolderCounts() {
+        // Update "All Conversations" count
+        if (this.allFolderCount) {
+            this.allFolderCount.textContent = this.getConversationCountForFolder('all');
+        }
+
+        // Update individual folder counts
+        this.folders.forEach(folder => {
+            const count = this.getConversationCountForFolder(folder.id);
+            const folderElement = document.querySelector(`.folder-item[data-folder="${folder.id}"] .folder-count`);
+            if (folderElement) {
+                folderElement.textContent = count;
+            }
+        });
+    }
+
+    /**
+     * Setup drag-and-drop for folders
+     */
+    setupFolderDragDrop() {
+        // Make conversations draggable
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            item.draggable = true;
+
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('conversationId', item.dataset.id);
+                item.classList.add('dragging');
+            });
+
+            item.addEventListener('dragend', (e) => {
+                item.classList.remove('dragging');
+            });
+        });
+
+        // Make folders drop targets
+        document.querySelectorAll('.folder-item').forEach(folder => {
+            folder.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                folder.classList.add('drag-over');
+            });
+
+            folder.addEventListener('dragleave', (e) => {
+                folder.classList.remove('drag-over');
+            });
+
+            folder.addEventListener('drop', (e) => {
+                e.preventDefault();
+                folder.classList.remove('drag-over');
+
+                const conversationId = e.dataTransfer.getData('conversationId');
+                const folderId = folder.dataset.folder;
+
+                if (conversationId && folderId) {
+                    this.moveConversationToFolder(conversationId, folderId);
+                }
+            });
+        });
+    }
+
+    /**
+     * Move conversation to folder
+     */
+    moveConversationToFolder(conversationId, folderId) {
+        const conversation = this.conversations[conversationId];
+        if (!conversation) return;
+
+        const oldFolderId = conversation.folderId || 'all';
+
+        // Set new folder (or remove folder if moving to "All")
+        if (folderId === 'all') {
+            delete conversation.folderId;
+        } else {
+            conversation.folderId = folderId;
+        }
+
+        conversation.lastModified = Date.now();
+        this.saveConversations();
+        this.renderFolders();
+        this.renderConversationsList();
+
+        const folderName = folderId === 'all' ? 'All Conversations' :
+            this.folders.find(f => f.id === folderId)?.name || 'Unknown';
+
+        this.showNotification(`Conversation moved to "${folderName}"`, 'success');
     }
 
     scrollToBottom() {

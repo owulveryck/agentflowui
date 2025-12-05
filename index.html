@@ -86,6 +86,23 @@
                     <h3>Conversations</h3>
                     <span id="conversation-count" class="conversation-count">0</span>
                 </div>
+
+                <!-- Folders -->
+                <div class="folders-container">
+                    <div class="folder-item all-conversations active" data-folder="all">
+                        <span class="material-icons folder-icon">inbox</span>
+                        <span class="folder-name">All Conversations</span>
+                        <span class="folder-count" id="all-folder-count">0</span>
+                    </div>
+                    <div id="folders-list" class="folders-list">
+                        <!-- Folders populated dynamically -->
+                    </div>
+                    <button id="add-folder-btn" class="add-folder-btn">
+                        <span class="material-icons">create_new_folder</span>
+                        <span>New Folder</span>
+                    </button>
+                </div>
+
                 <div class="search-container">
                     <span class="material-icons search-icon">search</span>
                     <input type="text" id="conversation-search" class="conversation-search" placeholder="Search conversations...">
