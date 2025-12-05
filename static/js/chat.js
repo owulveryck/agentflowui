@@ -64,6 +64,9 @@ class ChatUI {
         this.recognition = null;
         this.isListening = false;
 
+        // Templates state
+        this.templates = [];
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -451,6 +454,13 @@ class ChatUI {
 
         // Voice input
         this.voiceInputBtn = document.getElementById('voice-input-btn');
+
+        // Templates
+        this.templatesBtn = document.getElementById('templates-btn');
+        this.templatesDropdown = document.getElementById('templates-dropdown');
+        this.templatesList = document.getElementById('templates-list');
+        this.saveTemplateBtn = document.getElementById('save-template-btn');
+        this.manageTemplatesBtn = document.getElementById('manage-templates-btn');
     }
 
     /**
@@ -965,6 +975,31 @@ class ChatUI {
 
         // Initialize speech recognition if supported
         this.initializeSpeechRecognition();
+
+        // Templates
+        this.templatesBtn.addEventListener('click', () => {
+            this.templatesDropdown.classList.toggle('hidden');
+        });
+
+        this.saveTemplateBtn.addEventListener('click', () => {
+            this.saveCurrentAsTemplate();
+            this.templatesDropdown.classList.add('hidden');
+        });
+
+        this.manageTemplatesBtn.addEventListener('click', () => {
+            this.manageTemplates();
+            this.templatesDropdown.classList.add('hidden');
+        });
+
+        // Close templates dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!this.templatesBtn.contains(e.target) && !this.templatesDropdown.contains(e.target)) {
+                this.templatesDropdown.classList.add('hidden');
+            }
+        });
+
+        // Load templates from localStorage
+        this.loadTemplates();
     }
 
     /**
@@ -4110,6 +4145,170 @@ class ChatUI {
             console.log('Voice input stopped');
         } catch (error) {
             console.error('Failed to stop voice input:', error);
+        }
+    }
+
+    /**
+     * Load templates from localStorage
+     */
+    loadTemplates() {
+        try {
+            const saved = localStorage.getItem('prompt_templates');
+            if (saved) {
+                this.templates = JSON.parse(saved);
+            } else {
+                // Initialize with some default templates
+                this.templates = [
+                    {
+                        id: 'template_1',
+                        name: 'Bug Report',
+                        content: '**Bug Description:**\n\n**Steps to Reproduce:**\n1. \n2. \n\n**Expected Behavior:**\n\n**Actual Behavior:**\n'
+                    },
+                    {
+                        id: 'template_2',
+                        name: 'Code Review Request',
+                        content: 'Please review this code and provide feedback on:\n- Code quality and best practices\n- Potential bugs or edge cases\n- Performance improvements\n- Security concerns\n\n```\n\n```'
+                    },
+                    {
+                        id: 'template_3',
+                        name: 'Explain Concept',
+                        content: 'Please explain the following concept in simple terms:\n\n**Concept:** \n\n**Include:**\n- Definition\n- Real-world examples\n- Common use cases\n'
+                    }
+                ];
+                this.saveTemplates();
+            }
+            this.renderTemplates();
+        } catch (error) {
+            console.error('Failed to load templates:', error);
+            this.templates = [];
+        }
+    }
+
+    /**
+     * Save templates to localStorage
+     */
+    saveTemplates() {
+        try {
+            localStorage.setItem('prompt_templates', JSON.stringify(this.templates));
+        } catch (error) {
+            console.error('Failed to save templates:', error);
+            this.showNotification('Failed to save templates', 'error');
+        }
+    }
+
+    /**
+     * Render templates in dropdown
+     */
+    renderTemplates() {
+        if (this.templates.length === 0) {
+            this.templatesList.innerHTML = '<div class="empty-state">No templates yet</div>';
+            return;
+        }
+
+        let html = '';
+        this.templates.forEach((template, index) => {
+            html += `
+                <div class="dropdown-item template-item" data-index="${index}">
+                    <span class="material-icons">description</span>
+                    <span>${this.escapeHtml(template.name)}</span>
+                </div>
+            `;
+        });
+
+        this.templatesList.innerHTML = html;
+
+        // Add click listeners
+        document.querySelectorAll('.template-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const index = parseInt(item.dataset.index);
+                this.insertTemplate(this.templates[index]);
+                this.templatesDropdown.classList.add('hidden');
+            });
+        });
+    }
+
+    /**
+     * Insert template into input
+     */
+    insertTemplate(template) {
+        const currentValue = this.userInput.value;
+        const cursorPos = this.userInput.selectionStart;
+        const before = currentValue.substring(0, cursorPos);
+        const after = currentValue.substring(cursorPos);
+
+        this.userInput.value = before + template.content + after;
+
+        // Move cursor to end of inserted text
+        const newCursorPos = before.length + template.content.length;
+        this.userInput.setSelectionRange(newCursorPos, newCursorPos);
+
+        // Focus input and trigger resize
+        this.userInput.focus();
+        this.userInput.dispatchEvent(new Event('input'));
+
+        this.showNotification(`Inserted template: ${template.name}`, 'success');
+    }
+
+    /**
+     * Save current input as template
+     */
+    saveCurrentAsTemplate() {
+        const content = this.userInput.value.trim();
+
+        if (!content) {
+            this.showNotification('Input is empty. Nothing to save.', 'warning');
+            return;
+        }
+
+        const name = prompt('Enter a name for this template:');
+        if (!name || !name.trim()) {
+            return;
+        }
+
+        const template = {
+            id: `template_${Date.now()}`,
+            name: name.trim(),
+            content: content
+        };
+
+        this.templates.push(template);
+        this.saveTemplates();
+        this.renderTemplates();
+
+        this.showNotification(`Template "${name}" saved`, 'success');
+    }
+
+    /**
+     * Manage templates (show modal with edit/delete options)
+     */
+    manageTemplates() {
+        if (this.templates.length === 0) {
+            this.showNotification('No templates to manage', 'info');
+            return;
+        }
+
+        // Build template list
+        let templatesList = this.templates.map((t, i) => `${i + 1}. ${t.name}`).join('\n');
+        const action = prompt(`Templates:\n\n${templatesList}\n\nEnter template number to delete, or "cancel" to close:`);
+
+        if (!action || action.toLowerCase() === 'cancel') {
+            return;
+        }
+
+        const index = parseInt(action) - 1;
+        if (isNaN(index) || index < 0 || index >= this.templates.length) {
+            this.showNotification('Invalid template number', 'error');
+            return;
+        }
+
+        const template = this.templates[index];
+        const confirmDelete = confirm(`Delete template "${template.name}"?`);
+
+        if (confirmDelete) {
+            this.templates.splice(index, 1);
+            this.saveTemplates();
+            this.renderTemplates();
+            this.showNotification(`Template "${template.name}" deleted`, 'success');
         }
     }
 

@@ -2068,6 +2068,12 @@ body {
     font-size: 20px;
 }
 
+.dropdown-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: var(--spacing-xs) 0;
+}
+
 /* Audio Source Dropdown Enhancements */
 .audio-source-dropdown {
     min-width: 280px;

@@ -258,6 +258,27 @@
                         <span class="material-icons">keyboard_voice</span>
                     </button>
 
+                    <!-- Templates -->
+                    <div class="dropdown-container">
+                        <button id="templates-btn" class="icon-btn" title="Prompt Templates">
+                            <span class="material-icons">bookmark</span>
+                        </button>
+                        <div id="templates-dropdown" class="dropdown hidden">
+                            <div class="dropdown-list" id="templates-list">
+                                <!-- Templates populated dynamically -->
+                            </div>
+                            <div class="dropdown-divider"></div>
+                            <div class="dropdown-item" id="save-template-btn">
+                                <span class="material-icons">add</span>
+                                Save current as template
+                            </div>
+                            <div class="dropdown-item" id="manage-templates-btn">
+                                <span class="material-icons">settings</span>
+                                Manage templates
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Send/Stop Buttons -->
                     <button id="send-btn" class="btn btn-primary">
                         <span class="material-icons">send</span>
