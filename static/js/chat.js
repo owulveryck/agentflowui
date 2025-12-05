@@ -41,6 +41,9 @@ class ChatUI {
         // Sync freshness timer
         this.syncFreshnessInterval = null;
 
+        // Search state
+        this.searchQuery = '';
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -242,6 +245,11 @@ class ChatUI {
         this.syncIndicator = document.getElementById('sync-indicator');
         this.syncStatusText = document.getElementById('sync-status-text');
         this.syncActionIcon = document.getElementById('sync-action-icon');
+
+        // Conversation search
+        this.conversationSearch = document.getElementById('conversation-search');
+        this.clearSearchBtn = document.getElementById('clear-search');
+        this.conversationCount = document.getElementById('conversation-count');
     }
 
     /**
@@ -540,6 +548,26 @@ class ChatUI {
                 this.audioSourceDropdown.classList.add('hidden');
             }
         });
+
+        // Search/Filter functionality
+        this.conversationSearch.addEventListener('input', (e) => {
+            this.searchQuery = e.target.value.toLowerCase();
+            this.renderConversationsList();
+
+            // Show/hide clear button
+            if (this.searchQuery) {
+                this.clearSearchBtn.classList.remove('hidden');
+            } else {
+                this.clearSearchBtn.classList.add('hidden');
+            }
+        });
+
+        this.clearSearchBtn.addEventListener('click', () => {
+            this.conversationSearch.value = '';
+            this.searchQuery = '';
+            this.clearSearchBtn.classList.add('hidden');
+            this.renderConversationsList();
+        });
     }
 
     /**
@@ -834,40 +862,107 @@ class ChatUI {
     renderConversationsList() {
         const conversationIds = Object.keys(this.conversations);
 
+        // Update conversation count
+        this.conversationCount.textContent = conversationIds.length;
+
         if (conversationIds.length === 0) {
-            this.conversationsList.innerHTML = '<div class="empty-state">No conversations yet</div>';
+            this.conversationsList.innerHTML = '<div class="empty-state">No conversations yet<br><small>Click "New Chat" to start</small></div>';
             return;
         }
 
-        // Sort by last modified
-        const sorted = conversationIds.sort((a, b) => {
+        // Filter by search query
+        const filtered = conversationIds.filter(id => {
+            const conv = this.conversations[id];
+            if (!this.searchQuery) return true;
+
+            const titleMatch = conv.title.toLowerCase().includes(this.searchQuery);
+            const messagesMatch = conv.messages && conv.messages.some(msg => {
+                const content = typeof msg.content === 'string' ? msg.content : '';
+                return content.toLowerCase().includes(this.searchQuery);
+            });
+
+            return titleMatch || messagesMatch;
+        });
+
+        if (filtered.length === 0) {
+            this.conversationsList.innerHTML = '<div class="empty-state">No conversations found<br><small>Try a different search</small></div>';
+            return;
+        }
+
+        // Sort: pinned first, then by last modified
+        const sorted = filtered.sort((a, b) => {
+            const aPinned = this.conversations[a].pinned || false;
+            const bPinned = this.conversations[b].pinned || false;
+
+            // Pinned conversations come first
+            if (aPinned && !bPinned) return -1;
+            if (!aPinned && bPinned) return 1;
+
+            // Then sort by last modified
             const aTime = this.conversations[a].lastModified || 0;
             const bTime = this.conversations[b].lastModified || 0;
             return bTime - aTime;
         });
 
-        let html = '';
-        sorted.forEach(id => {
-            const conv = this.conversations[id];
-            const isActive = id === this.currentConversationId;
+        // Group by date (but keep pinned separate)
+        const pinned = sorted.filter(id => this.conversations[id].pinned);
+        const unpinned = sorted.filter(id => !this.conversations[id].pinned);
 
-            html += `
-                <div class="conversation-item ${isActive ? 'active' : ''}" data-id="${id}">
-                    <div class="conversation-title">${this.escapeHtml(conv.title)}</div>
-                    <div class="conversation-actions">
-                        <button class="icon-btn-small rename-conv-btn" data-id="${id}" title="Rename">
-                            <span class="material-icons">edit</span>
-                        </button>
-                        <button class="icon-btn-small duplicate-conv-btn" data-id="${id}" title="Duplicate">
-                            <span class="material-icons">content_copy</span>
-                        </button>
-                        <button class="icon-btn-small delete-conv-btn" data-id="${id}" title="Delete">
-                            <span class="material-icons">delete</span>
-                        </button>
+        const grouped = {};
+        if (pinned.length > 0) {
+            grouped['Pinned'] = pinned;
+        }
+        const unpinnedGrouped = this.groupConversationsByDate(unpinned);
+        Object.assign(grouped, unpinnedGrouped);
+
+        let html = '';
+        for (const [groupLabel, convIds] of Object.entries(grouped)) {
+            html += `<div class="conversation-group-label">${groupLabel}</div>`;
+
+            convIds.forEach(id => {
+                const conv = this.conversations[id];
+                const isActive = id === this.currentConversationId;
+
+                // Get message preview
+                const preview = this.getMessagePreview(conv);
+                const messageCount = conv.messages ? conv.messages.length : 0;
+                const lastModified = this.formatRelativeTime(conv.lastModified);
+
+                const isPinned = conv.pinned || false;
+                const pinIcon = isPinned ? 'push_pin' : 'push_pin';
+                const pinTitle = isPinned ? 'Unpin' : 'Pin';
+
+                html += `
+                    <div class="conversation-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''}" data-id="${id}">
+                        <div class="conversation-content">
+                            <div class="conversation-title">
+                                ${isPinned ? '<span class="material-icons pin-indicator">push_pin</span>' : ''}
+                                ${this.escapeHtml(conv.title)}
+                            </div>
+                            <div class="conversation-preview">${this.escapeHtml(preview)}</div>
+                            <div class="conversation-meta">
+                                <span class="conversation-message-count">${messageCount} message${messageCount !== 1 ? 's' : ''}</span>
+                                <span class="conversation-time">${lastModified}</span>
+                            </div>
+                        </div>
+                        <div class="conversation-actions">
+                            <button class="icon-btn-small pin-conv-btn" data-id="${id}" title="${pinTitle}">
+                                <span class="material-icons">${pinIcon}</span>
+                            </button>
+                            <button class="icon-btn-small rename-conv-btn" data-id="${id}" title="Rename">
+                                <span class="material-icons">edit</span>
+                            </button>
+                            <button class="icon-btn-small duplicate-conv-btn" data-id="${id}" title="Duplicate">
+                                <span class="material-icons">content_copy</span>
+                            </button>
+                            <button class="icon-btn-small delete-conv-btn" data-id="${id}" title="Delete">
+                                <span class="material-icons">delete</span>
+                            </button>
+                        </div>
                     </div>
-                </div>
-            `;
-        });
+                `;
+            });
+        }
 
         this.conversationsList.innerHTML = html;
 
@@ -877,6 +972,13 @@ class ChatUI {
                 if (!e.target.closest('.conversation-actions')) {
                     this.loadConversation(item.dataset.id);
                 }
+            });
+        });
+
+        document.querySelectorAll('.pin-conv-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.togglePinConversation(btn.dataset.id);
             });
         });
 
@@ -900,6 +1002,121 @@ class ChatUI {
                 this.deleteConversation(btn.dataset.id);
             });
         });
+    }
+
+    /**
+     * Group conversations by date
+     */
+    groupConversationsByDate(conversationIds) {
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const thisWeek = new Date(today);
+        thisWeek.setDate(thisWeek.getDate() - 7);
+
+        const groups = {
+            'Today': [],
+            'Yesterday': [],
+            'This Week': [],
+            'Older': []
+        };
+
+        conversationIds.forEach(id => {
+            const conv = this.conversations[id];
+            const convDate = new Date(conv.lastModified || conv.createdAt || 0);
+
+            if (convDate >= today) {
+                groups['Today'].push(id);
+            } else if (convDate >= yesterday) {
+                groups['Yesterday'].push(id);
+            } else if (convDate >= thisWeek) {
+                groups['This Week'].push(id);
+            } else {
+                groups['Older'].push(id);
+            }
+        });
+
+        // Remove empty groups
+        const result = {};
+        for (const [label, ids] of Object.entries(groups)) {
+            if (ids.length > 0) {
+                result[label] = ids;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * Get message preview from conversation
+     */
+    getMessagePreview(conversation) {
+        if (!conversation.messages || conversation.messages.length === 0) {
+            return 'No messages';
+        }
+
+        // Get last user or assistant message
+        const lastMessage = conversation.messages[conversation.messages.length - 1];
+        let content = '';
+
+        if (typeof lastMessage.content === 'string') {
+            content = lastMessage.content;
+        } else if (Array.isArray(lastMessage.content)) {
+            // Extract text from multimodal content
+            const textItem = lastMessage.content.find(item => item.type === 'text');
+            if (textItem) {
+                content = textItem.text;
+            } else {
+                // No text, show what types are present
+                const types = lastMessage.content.map(item => {
+                    if (item.type === 'image_url') return '🖼️ Image';
+                    if (item.type === 'audio') return '🎵 Audio';
+                    if (item.type === 'file') return '📄 File';
+                    return item.type;
+                });
+                return types.join(', ');
+            }
+        }
+
+        // Truncate to 60 characters
+        return content.length > 60 ? content.substring(0, 60) + '...' : content;
+    }
+
+    /**
+     * Format relative time
+     */
+    formatRelativeTime(timestamp) {
+        if (!timestamp) return '';
+
+        const now = Date.now();
+        const diff = now - timestamp;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (seconds < 60) return 'just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        if (hours < 24) return `${hours}h ago`;
+        if (days < 7) return `${days}d ago`;
+
+        // Format as date for older conversations
+        const date = new Date(timestamp);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    /**
+     * Toggle pin conversation
+     */
+    togglePinConversation(id) {
+        const conv = this.conversations[id];
+        if (!conv) return;
+
+        conv.pinned = !conv.pinned;
+        conv.lastModified = Date.now();
+        this.renderConversationsList();
+        this.saveConversations();
     }
 
     /**

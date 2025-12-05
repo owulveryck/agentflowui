@@ -69,7 +69,17 @@
 
             <!-- Conversations List -->
             <div class="menu-section">
-                <h3>Conversations</h3>
+                <div class="conversations-header">
+                    <h3>Conversations</h3>
+                    <span id="conversation-count" class="conversation-count">0</span>
+                </div>
+                <div class="search-container">
+                    <span class="material-icons search-icon">search</span>
+                    <input type="text" id="conversation-search" class="conversation-search" placeholder="Search conversations...">
+                    <button id="clear-search" class="icon-btn-clear hidden">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
                 <div id="conversations-list" class="conversations-list"></div>
             </div>
         </aside>
