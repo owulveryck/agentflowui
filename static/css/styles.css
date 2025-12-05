@@ -515,6 +515,64 @@ body {
     opacity: 0.5;
 }
 
+.message-document {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    margin: var(--spacing-sm) 0;
+    background-color: rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+}
+
+.document-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background-color: var(--error-color);
+    border-radius: var(--radius-md);
+    flex-shrink: 0;
+}
+
+.document-icon .material-icons {
+    font-size: 32px;
+    color: var(--white);
+}
+
+.document-info {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+    flex: 1;
+}
+
+.document-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.document-download {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 0.75rem;
+    color: var(--turquoise);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.document-download:hover {
+    color: var(--navy-blue);
+}
+
+.document-download .material-icons {
+    font-size: 16px;
+}
+
 .message-actions {
     display: flex;
     gap: var(--spacing-xs);

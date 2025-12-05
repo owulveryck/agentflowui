@@ -647,6 +647,37 @@ class ChatUI {
                                     };
                                 }
                             }
+                            // Restore Google Drive reference for documents if it was cached
+                            if (item.type === 'document' && item.document) {
+                                if (item.document._gdriveUrl) {
+                                    // Restore original gdrive:// URL
+                                    return {
+                                        type: 'document',
+                                        document: {
+                                            data: item.document._gdriveUrl,
+                                            filename: item.document.filename
+                                        }
+                                    };
+                                } else if (item.document._uploadPending) {
+                                    // Upload still pending - don't save (will be updated when upload completes)
+                                    return {
+                                        type: 'document',
+                                        document: {
+                                            data: '[Document upload in progress - not saved]',
+                                            filename: item.document.filename
+                                        }
+                                    };
+                                } else if (item.document.data && !item.document.data.startsWith('gdrive://')) {
+                                    // Remove inline base64 data
+                                    return {
+                                        type: 'document',
+                                        document: {
+                                            data: '[Document data not saved to conserve storage]',
+                                            filename: item.document.filename
+                                        }
+                                    };
+                                }
+                            }
                             return item;
                         });
                     }
@@ -949,6 +980,20 @@ class ChatUI {
                             console.error('Failed to cache Google Drive audio:', error);
                         }
                     }
+
+                    // Download and cache Google Drive documents
+                    if (item.type === 'document' && item.document && item.document.data.startsWith('gdrive://')) {
+                        try {
+                            const gdriveUrl = item.document.data;
+                            const dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
+                            // Store both: base64 for display/API, gdrive:// for storage
+                            msg.content[j].document._gdriveUrl = gdriveUrl;
+                            msg.content[j].document.data = dataURL;
+                            console.log('Cached Google Drive document');
+                        } catch (error) {
+                            console.error('Failed to cache Google Drive document:', error);
+                        }
+                    }
                 }
             }
         }
@@ -1050,6 +1095,25 @@ class ChatUI {
                         </div>`;
                     } else {
                         html += `<div class="message-file-placeholder"><span class="material-icons">audiotrack</span> <em>Audio not available</em></div>`;
+                    }
+                } else if (item.type === 'document' && item.document) {
+                    const data = item.document.data;
+                    const filename = item.document.filename || 'document.pdf';
+                    if (data && data !== '[Document data not saved to conserve storage]' && data !== '[Document upload in progress - not saved]') {
+                        html += `<div class="message-document">
+                            <div class="document-icon">
+                                <span class="material-icons">picture_as_pdf</span>
+                            </div>
+                            <div class="document-info">
+                                <span class="document-name">${this.escapeHtml(filename)}</span>
+                                <a href="${this.escapeHtml(data)}" download="${this.escapeHtml(filename)}" class="document-download">
+                                    <span class="material-icons">download</span>
+                                    Download
+                                </a>
+                            </div>
+                        </div>`;
+                    } else {
+                        html += `<div class="message-file-placeholder"><span class="material-icons">picture_as_pdf</span> <em>Document not available</em></div>`;
                     }
                 }
             }
@@ -1422,6 +1486,22 @@ class ChatUI {
                         imageData.image_url._uploadPending = file;
                     }
                     messageContent.push(imageData);
+                } else if (file.fileType === 'application/pdf') {
+                    const pdfData = {
+                        type: 'document',
+                        document: {
+                            data: dataURL,
+                            filename: file.fileName
+                        }
+                    };
+                    // Keep original gdrive URL for storage if available
+                    if (gdriveUrl) {
+                        pdfData.document._gdriveUrl = gdriveUrl;
+                    } else if (file.uploading) {
+                        // Mark for future update when upload completes
+                        pdfData.document._uploadPending = file;
+                    }
+                    messageContent.push(pdfData);
                 } else if (file.fileType.startsWith('audio/')) {
                     const audioData = {
                         type: 'audio',
@@ -1904,6 +1984,7 @@ class ChatUI {
      */
     async handleFileSelection(files) {
         for (const file of files) {
+            // Accept all image formats, PDFs, and audio
             if (file.type.startsWith('image/') ||
                 file.type === 'application/pdf' ||
                 file.type.startsWith('audio/')) {
@@ -1911,6 +1992,7 @@ class ChatUI {
                 try {
                     const isAudio = file.type.startsWith('audio/');
                     const isImage = file.type.startsWith('image/');
+                    const isPDF = file.type === 'application/pdf';
 
                     // Show immediately with local data URL (non-blocking)
                     const dataURL = await this.fileToDataURL(file);
@@ -1929,7 +2011,7 @@ class ChatUI {
 
                     // Upload to Google Drive in background if online
                     const syncStatus = this.storageManager.getSyncStatus();
-                    if (syncStatus.mode === 'online' && (isAudio || isImage || file.size > this.FILE_SIZE_THRESHOLD)) {
+                    if (syncStatus.mode === 'online' && (isAudio || isImage || isPDF || file.size > this.FILE_SIZE_THRESHOLD)) {
                         fileObj.uploading = true;
                         this.renderFilePreview(); // Update to show uploading state
 
@@ -2003,6 +2085,12 @@ class ChatUI {
                         delete item.audio._uploadPending;
                         updated = true;
                     }
+                    // Update documents
+                    if (item.type === 'document' && item.document?._uploadPending === fileObj) {
+                        item.document._gdriveUrl = gdriveUrl;
+                        delete item.document._uploadPending;
+                        updated = true;
+                    }
                 }
             }
         }
@@ -2039,7 +2127,7 @@ class ChatUI {
                 badge = '<span class="artifact-badge" style="background-color: var(--warning-color);">TEMP</span>';
             }
 
-            // Show image thumbnail for image files
+            // Show thumbnail/icon based on file type
             let thumbnail = '';
             if (file.fileType.startsWith('image/')) {
                 // Always use the local dataURL for preview (instant display)
@@ -2050,6 +2138,9 @@ class ChatUI {
                 } else {
                     thumbnail = `<div class="file-preview-thumbnail-placeholder"><span class="material-icons">image</span></div>`;
                 }
+            } else if (file.fileType === 'application/pdf') {
+                // Show PDF icon
+                thumbnail = `<div class="file-preview-thumbnail-placeholder" style="background-color: var(--error-color);"><span class="material-icons" style="color: white;">picture_as_pdf</span></div>`;
             }
 
             html += `
