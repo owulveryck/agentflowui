@@ -60,6 +60,10 @@ class ChatUI {
         this.selectedCommandIndex = 0;
         this.filteredCommands = [];
 
+        // Voice input state
+        this.recognition = null;
+        this.isListening = false;
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -444,6 +448,9 @@ class ChatUI {
         // Slash commands
         this.slashCommandsDropdown = document.getElementById('slash-commands-dropdown');
         this.slashCommandsList = document.getElementById('slash-commands-list');
+
+        // Voice input
+        this.voiceInputBtn = document.getElementById('voice-input-btn');
     }
 
     /**
@@ -950,6 +957,14 @@ class ChatUI {
                 }
             }
         });
+
+        // Voice input
+        this.voiceInputBtn.addEventListener('click', () => {
+            this.toggleVoiceInput();
+        });
+
+        // Initialize speech recognition if supported
+        this.initializeSpeechRecognition();
     }
 
     /**
@@ -3956,6 +3971,146 @@ class ChatUI {
 
         // Show notification
         this.showNotification(`Inserted ${command.name}`, 'success');
+    }
+
+    /**
+     * Initialize speech recognition
+     */
+    initializeSpeechRecognition() {
+        // Check if browser supports speech recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            console.warn('Speech recognition not supported in this browser');
+            this.voiceInputBtn.style.display = 'none'; // Hide button if not supported
+            return;
+        }
+
+        this.recognition = new SpeechRecognition();
+        this.recognition.continuous = true; // Keep listening until stopped
+        this.recognition.interimResults = true; // Show interim results
+        this.recognition.lang = 'en-US';
+
+        // Handle recognition results
+        this.recognition.onresult = (event) => {
+            let interimTranscript = '';
+            let finalTranscript = '';
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+
+            // Insert recognized text into input
+            if (finalTranscript) {
+                const currentValue = this.userInput.value;
+                const cursorPos = this.userInput.selectionStart;
+                const before = currentValue.substring(0, cursorPos);
+                const after = currentValue.substring(cursorPos);
+
+                this.userInput.value = before + finalTranscript + after;
+
+                // Move cursor to end of inserted text
+                const newCursorPos = before.length + finalTranscript.length;
+                this.userInput.setSelectionRange(newCursorPos, newCursorPos);
+
+                // Trigger input event for auto-resize
+                this.userInput.dispatchEvent(new Event('input'));
+            }
+        };
+
+        // Handle recognition errors
+        this.recognition.onerror = (event) => {
+            console.error('Speech recognition error:', event.error);
+
+            let errorMessage = 'Voice input error';
+            switch (event.error) {
+                case 'no-speech':
+                    errorMessage = 'No speech detected. Please try again.';
+                    break;
+                case 'audio-capture':
+                    errorMessage = 'No microphone found. Please check your microphone.';
+                    break;
+                case 'not-allowed':
+                    errorMessage = 'Microphone permission denied. Please allow microphone access.';
+                    break;
+                default:
+                    errorMessage = `Voice input error: ${event.error}`;
+            }
+
+            this.showNotification(errorMessage, 'error');
+            this.stopVoiceInput();
+        };
+
+        // Handle recognition end
+        this.recognition.onend = () => {
+            if (this.isListening) {
+                // If we're still supposed to be listening, restart
+                // (this can happen if recognition stops due to silence)
+                try {
+                    this.recognition.start();
+                } catch (error) {
+                    console.error('Failed to restart recognition:', error);
+                    this.stopVoiceInput();
+                }
+            }
+        };
+
+        console.log('Speech recognition initialized');
+    }
+
+    /**
+     * Toggle voice input
+     */
+    toggleVoiceInput() {
+        if (this.isListening) {
+            this.stopVoiceInput();
+        } else {
+            this.startVoiceInput();
+        }
+    }
+
+    /**
+     * Start voice input
+     */
+    startVoiceInput() {
+        if (!this.recognition) {
+            this.showNotification('Speech recognition not supported in this browser', 'error');
+            return;
+        }
+
+        try {
+            this.recognition.start();
+            this.isListening = true;
+            this.voiceInputBtn.classList.add('listening');
+            this.voiceInputBtn.title = 'Stop listening';
+            this.showNotification('Listening... Speak now', 'info');
+            console.log('Voice input started');
+        } catch (error) {
+            console.error('Failed to start voice input:', error);
+            this.showNotification('Failed to start voice input', 'error');
+        }
+    }
+
+    /**
+     * Stop voice input
+     */
+    stopVoiceInput() {
+        if (!this.recognition) return;
+
+        try {
+            this.recognition.stop();
+            this.isListening = false;
+            this.voiceInputBtn.classList.remove('listening');
+            this.voiceInputBtn.title = 'Voice Input (Speech-to-Text)';
+            console.log('Voice input stopped');
+        } catch (error) {
+            console.error('Failed to stop voice input:', error);
+        }
     }
 
     scrollToBottom() {
