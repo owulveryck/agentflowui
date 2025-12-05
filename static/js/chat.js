@@ -1049,7 +1049,7 @@ class ChatUI {
         return `
             <div class="message ${isUser ? 'user-message' : 'assistant-message'}" data-index="${index}">
                 <div class="message-content">
-                    ${this.renderMessageContent(content)}
+                    ${this.renderMessageContent(content, msg.isTyping)}
                 </div>
                 <div class="message-actions">
                     <button class="action-btn edit-msg-btn" data-index="${index}" title="Edit">
@@ -1069,7 +1069,12 @@ class ChatUI {
     /**
      * Render message content with markdown (using legacy renderMarkdown method)
      */
-    renderMessageContent(content) {
+    renderMessageContent(content, isTyping = false) {
+        // Show typing indicator if message is being typed
+        if (isTyping) {
+            return '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+        }
+
         if (!content) return '';
 
         // Handle multimodal content (array of items)
@@ -1581,11 +1586,12 @@ class ChatUI {
             // Note: Google Drive artifacts are already cached as base64 in this.messages
             // from cacheGoogleDriveArtifacts(), so no need to resolve them here
 
-            // Create assistant message placeholder
+            // Create assistant message placeholder with typing indicator
             const assistantMessage = {
                 role: 'assistant',
                 content: '',
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                isTyping: true  // Flag to show typing animation
             };
 
             this.messages.push(assistantMessage);
@@ -1668,6 +1674,11 @@ class ChatUI {
                             const delta = parsed.choices[0].delta;
 
                             if (delta && delta.content) {
+                                // Remove typing indicator on first content
+                                if (assistantMessage.isTyping) {
+                                    delete assistantMessage.isTyping;
+                                }
+
                                 assistantMessage.content += delta.content;
 
                                 // Update last message
