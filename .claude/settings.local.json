@@ -5,7 +5,9 @@
       "Bash(chmod:*)",
       "Bash(git commit -m \"$(cat <<''EOF''\nImplement optimized image handling with Google Drive integration\n\n- Add image thumbnail preview when attaching PNG/images to chat\n- Display full images in chat messages after sending\n- Optimize Google Drive image loading: cache base64 on conversation load\n- Store images as gdrive:// references to minimize storage footprint\n- Remove artifact server code, use Google Drive exclusively for media storage\n- Clean up file handling logic across upload, display, and storage\n\nImages are now downloaded once when a conversation loads and cached in\nmemory as base64, providing fast rendering and API calls while keeping\nstorage minimal with gdrive:// references.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "WebSearch",
+      "Bash(gh:*)"
     ],
     "deny": [],
     "ask": []
