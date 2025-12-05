@@ -3014,6 +3014,316 @@ body {
 }
 
 /* ============================================
+   Loading States & Skeletons
+   ============================================ */
+.loading-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--navy-20);
+    border-top-color: var(--turquoise);
+    border-radius: var(--radius-full);
+    animation: spin 0.8s linear infinite;
+}
+
+.loading-spinner-large {
+    width: 40px;
+    height: 40px;
+    border-width: 3px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        var(--navy-10) 25%,
+        var(--navy-20) 50%,
+        var(--navy-10) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.skeleton-text {
+    height: 16px;
+    margin-bottom: var(--spacing-sm);
+}
+
+.skeleton-text.large {
+    height: 24px;
+}
+
+.skeleton-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-full);
+}
+
+/* ============================================
+   Enhanced Empty States
+   ============================================ */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xl);
+    text-align: center;
+    color: var(--text-secondary);
+    min-height: 300px;
+}
+
+.empty-state-icon {
+    width: 120px;
+    height: 120px;
+    margin-bottom: var(--spacing-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--navy-10), var(--turquoise-10));
+    border-radius: var(--radius-full);
+}
+
+.empty-state-icon .material-icons {
+    font-size: 64px;
+    color: var(--navy-40);
+}
+
+.empty-state-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-description {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    max-width: 400px;
+    margin-bottom: var(--spacing-lg);
+}
+
+.empty-state-action {
+    margin-top: var(--spacing-md);
+}
+
+/* ============================================
+   Enhanced Animations & Micro-interactions
+   ============================================ */
+/* Smooth hover lift effect */
+.btn:not(:disabled):hover,
+.conversation-item:hover,
+.folder-item:hover,
+.file-preview-item:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn:not(:disabled):active,
+.conversation-item:active,
+.folder-item:active {
+    transform: translateY(0);
+}
+
+/* Ripple effect on buttons */
+.btn,
+.icon-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after,
+.icon-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: var(--radius-full);
+    background-color: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:active::after,
+.icon-btn:active::after {
+    width: 200px;
+    height: 200px;
+}
+
+/* Pulse effect for important actions */
+@keyframes pulse-important {
+    0% {
+        box-shadow: 0 0 0 0 rgba(0, 210, 221, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(0, 210, 221, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(0, 210, 221, 0);
+    }
+}
+
+.btn-primary:hover:not(:disabled) {
+    animation: pulse-important 2s infinite;
+}
+
+/* Smooth scale on interaction */
+.icon-btn:hover:not(:disabled),
+.icon-btn-small:hover:not(:disabled),
+.icon-btn-tiny:hover:not(:disabled) {
+    transform: scale(1.1);
+}
+
+.icon-btn:active:not(:disabled),
+.icon-btn-small:active:not(:disabled),
+.icon-btn-tiny:active:not(:disabled) {
+    transform: scale(0.95);
+}
+
+/* Tag animation */
+.tag-pill {
+    animation: tag-fade-in 0.3s ease;
+}
+
+@keyframes tag-fade-in {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Message entrance animation */
+.message {
+    animation: message-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes message-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Notification slide animation (enhanced) */
+.notification-toast {
+    animation: notification-slide-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes notification-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(100%) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+.notification-toast.removing {
+    animation: notification-slide-out 0.3s ease forwards;
+}
+
+@keyframes notification-slide-out {
+    to {
+        opacity: 0;
+        transform: translateX(100%) scale(0.9);
+    }
+}
+
+/* Smooth modal entrance */
+.modal:not(.hidden) .modal-content {
+    animation: modal-entrance 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modal-entrance {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Loading progress bar */
+.loading-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--turquoise), var(--turquoise-70));
+    transform-origin: left;
+    animation: loading-progress 2s ease-in-out infinite;
+    z-index: var(--z-toast);
+}
+
+@keyframes loading-progress {
+    0% {
+        transform: scaleX(0);
+    }
+    50% {
+        transform: scaleX(0.5);
+    }
+    100% {
+        transform: scaleX(1);
+    }
+}
+
+/* Smooth folder expand/collapse */
+.folders-list {
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced checkbox animation */
+input[type="checkbox"] {
+    transition: all 0.2s ease;
+}
+
+input[type="checkbox"]:checked {
+    animation: checkbox-pop 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes checkbox-pop {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* ============================================
    Mobile Responsive
    ============================================ */
 @media (max-width: 768px) {
