@@ -460,6 +460,29 @@ class ChatUI {
         // Keyboard shortcuts modal
         this.keyboardShortcutsModal = document.getElementById('keyboard-shortcuts-modal');
 
+        // Trim audio modal
+        this.trimAudioModal = document.getElementById('trim-audio-modal');
+        this.trimWaveform = document.getElementById('trim-waveform');
+        this.trimRegion = document.getElementById('trim-region');
+        this.trimHandleStart = document.getElementById('trim-handle-start');
+        this.trimHandleEnd = document.getElementById('trim-handle-end');
+        this.trimStartTime = document.getElementById('trim-start-time');
+        this.trimEndTime = document.getElementById('trim-end-time');
+        this.trimDuration = document.getElementById('trim-duration');
+        this.trimPlayBtn = document.getElementById('trim-play-btn');
+        this.trimCancelBtn = document.getElementById('trim-cancel-btn');
+        this.trimApplyBtn = document.getElementById('trim-apply-btn');
+        this.trimModalClose = document.getElementById('trim-modal-close');
+
+        // Trim state
+        this.trimFileIndex = null;
+        this.trimAudioBuffer = null;
+        this.trimAudioContext = null;
+        this.trimAudioSource = null;
+        this.trimStartPercent = 0;
+        this.trimEndPercent = 100;
+        this.trimDragging = null;
+
         // Dark mode toggle
         this.darkModeToggle = document.getElementById('dark-mode-toggle');
 
@@ -952,6 +975,67 @@ class ChatUI {
                     this.keyboardShortcutsModal.classList.add('hidden');
                 });
             }
+        }
+
+        // Trim audio modal
+        if (this.trimAudioModal) {
+            const modalBackdrop = this.trimAudioModal.querySelector('.modal-backdrop');
+
+            if (this.trimModalClose) {
+                this.trimModalClose.addEventListener('click', () => {
+                    this.closeTrimModal();
+                });
+            }
+
+            if (modalBackdrop) {
+                modalBackdrop.addEventListener('click', () => {
+                    this.closeTrimModal();
+                });
+            }
+
+            if (this.trimCancelBtn) {
+                this.trimCancelBtn.addEventListener('click', () => {
+                    this.closeTrimModal();
+                });
+            }
+
+            if (this.trimApplyBtn) {
+                this.trimApplyBtn.addEventListener('click', () => {
+                    this.applyTrim();
+                });
+            }
+
+            if (this.trimPlayBtn) {
+                this.trimPlayBtn.addEventListener('click', () => {
+                    this.previewTrimmedAudio();
+                });
+            }
+
+            // Trim handle drag events
+            if (this.trimHandleStart) {
+                this.trimHandleStart.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.trimDragging = 'start';
+                });
+            }
+
+            if (this.trimHandleEnd) {
+                this.trimHandleEnd.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    this.trimDragging = 'end';
+                });
+            }
+
+            // Global mouse move and up for dragging
+            document.addEventListener('mousemove', (e) => {
+                if (this.trimDragging && this.trimRegion) {
+                    this.handleTrimDrag(e);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                this.trimDragging = null;
+            });
         }
 
         // Dark mode toggle
@@ -3744,6 +3828,22 @@ class ChatUI {
             } else if (file.fileType === 'application/pdf') {
                 // Show PDF icon
                 thumbnail = `<div class="file-preview-thumbnail-placeholder" style="background-color: var(--error-color);"><span class="material-icons" style="color: white;">picture_as_pdf</span></div>`;
+            } else if (file.fileType.startsWith('audio/')) {
+                // Show audio icon
+                thumbnail = `<div class="file-preview-thumbnail-placeholder" style="background-color: var(--turquoise);"><span class="material-icons" style="color: white;">audiotrack</span></div>`;
+            }
+
+            // Add trim button for audio files
+            let actions = '';
+            if (file.fileType.startsWith('audio/') && !file.uploading) {
+                actions = `
+                    <div class="file-preview-actions">
+                        <button class="trim-file-btn" data-index="${index}" title="Trim audio">
+                            <span class="material-icons">content_cut</span>
+                            Trim
+                        </button>
+                    </div>
+                `;
             }
 
             html += `
@@ -3753,6 +3853,7 @@ class ChatUI {
                         <span class="file-name">${this.escapeHtml(file.fileName)}</span>
                         <span class="file-size">${sizeStr}</span>
                         ${badge}
+                        ${actions}
                     </div>
                     <button class="remove-file-btn" data-index="${index}">
                         <span class="material-icons">close</span>
@@ -3769,6 +3870,14 @@ class ChatUI {
                 const index = parseInt(btn.dataset.index);
                 this.selectedFiles.splice(index, 1);
                 this.renderFilePreview();
+            });
+        });
+
+        // Add trim listeners
+        document.querySelectorAll('.trim-file-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const index = parseInt(btn.dataset.index);
+                this.openTrimModal(index);
             });
         });
     }
@@ -5539,6 +5648,348 @@ class ChatUI {
         this.exitBulkMode();
 
         this.showNotification(`${count} conversation(s) deleted`, 'success');
+    }
+
+    /**
+     * Open trim modal for audio file
+     */
+    async openTrimModal(fileIndex) {
+        const file = this.selectedFiles[fileIndex];
+        if (!file || !file.fileType.startsWith('audio/')) {
+            return;
+        }
+
+        this.trimFileIndex = fileIndex;
+        this.trimStartPercent = 0;
+        this.trimEndPercent = 100;
+
+        // Show modal
+        this.trimAudioModal.classList.remove('hidden');
+
+        try {
+            // Create audio context and decode audio
+            this.trimAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Fetch and decode audio
+            const response = await fetch(file.dataURL);
+            const arrayBuffer = await response.arrayBuffer();
+            this.trimAudioBuffer = await this.trimAudioContext.decodeAudioData(arrayBuffer);
+
+            // Draw waveform
+            this.drawTrimWaveform();
+
+            // Update time displays
+            this.updateTrimTimeDisplays();
+
+            // Reset handles to full range
+            this.trimHandleStart.style.left = '0%';
+            this.trimHandleEnd.style.left = '100%';
+
+        } catch (error) {
+            console.error('Failed to load audio for trimming:', error);
+            this.showNotification('Failed to load audio file', 'error');
+            this.closeTrimModal();
+        }
+    }
+
+    /**
+     * Close trim modal
+     */
+    closeTrimModal() {
+        this.trimAudioModal.classList.add('hidden');
+
+        // Stop any playing audio
+        if (this.trimAudioSource) {
+            try {
+                this.trimAudioSource.stop();
+            } catch (e) {
+                // Already stopped
+            }
+            this.trimAudioSource = null;
+        }
+
+        // Close audio context
+        if (this.trimAudioContext) {
+            this.trimAudioContext.close();
+            this.trimAudioContext = null;
+        }
+
+        this.trimFileIndex = null;
+        this.trimAudioBuffer = null;
+    }
+
+    /**
+     * Draw waveform in trim modal
+     */
+    drawTrimWaveform() {
+        if (!this.trimAudioBuffer || !this.trimWaveform) return;
+
+        const canvas = this.trimWaveform;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Get audio data
+        const rawData = this.trimAudioBuffer.getChannelData(0);
+        const samples = 200; // Number of bars
+        const blockSize = Math.floor(rawData.length / samples);
+        const filteredData = [];
+
+        for (let i = 0; i < samples; i++) {
+            let blockStart = blockSize * i;
+            let sum = 0;
+            for (let j = 0; j < blockSize; j++) {
+                sum += Math.abs(rawData[blockStart + j]);
+            }
+            filteredData.push(sum / blockSize);
+        }
+
+        // Normalize
+        const maxValue = Math.max(...filteredData);
+        const normalizedData = filteredData.map(n => n / maxValue);
+
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+
+        // Draw waveform bars
+        const barWidth = width / samples;
+        for (let i = 0; i < normalizedData.length; i++) {
+            const barHeight = normalizedData[i] * height * 0.9;
+            const x = i * barWidth;
+            const y = (height - barHeight) / 2;
+
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, '#00D2DD');
+            gradient.addColorStop(1, '#3CD7E0');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, barWidth - 1, barHeight);
+        }
+    }
+
+    /**
+     * Handle trim handle dragging
+     */
+    handleTrimDrag(e) {
+        if (!this.trimRegion || !this.trimDragging) return;
+
+        const rect = this.trimRegion.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = Math.max(0, Math.min(100, (x / rect.width) * 100));
+
+        if (this.trimDragging === 'start') {
+            // Don't allow start to go past end
+            if (percent < this.trimEndPercent) {
+                this.trimStartPercent = percent;
+                this.trimHandleStart.style.left = `${percent}%`;
+            }
+        } else if (this.trimDragging === 'end') {
+            // Don't allow end to go before start
+            if (percent > this.trimStartPercent) {
+                this.trimEndPercent = percent;
+                this.trimHandleEnd.style.left = `${percent}%`;
+            }
+        }
+
+        this.updateTrimTimeDisplays();
+    }
+
+    /**
+     * Update trim time displays
+     */
+    updateTrimTimeDisplays() {
+        if (!this.trimAudioBuffer) return;
+
+        const duration = this.trimAudioBuffer.duration;
+        const startTime = (this.trimStartPercent / 100) * duration;
+        const endTime = (this.trimEndPercent / 100) * duration;
+        const trimmedDuration = endTime - startTime;
+
+        this.trimStartTime.textContent = this.formatTime(startTime);
+        this.trimEndTime.textContent = this.formatTime(endTime);
+        this.trimDuration.textContent = this.formatTime(trimmedDuration);
+    }
+
+    /**
+     * Preview trimmed audio
+     */
+    previewTrimmedAudio() {
+        if (!this.trimAudioBuffer || !this.trimAudioContext) return;
+
+        // Stop any existing playback
+        if (this.trimAudioSource) {
+            try {
+                this.trimAudioSource.stop();
+            } catch (e) {
+                // Already stopped
+            }
+        }
+
+        const duration = this.trimAudioBuffer.duration;
+        const startTime = (this.trimStartPercent / 100) * duration;
+        const endTime = (this.trimEndPercent / 100) * duration;
+
+        // Create audio source
+        this.trimAudioSource = this.trimAudioContext.createBufferSource();
+        this.trimAudioSource.buffer = this.trimAudioBuffer;
+        this.trimAudioSource.connect(this.trimAudioContext.destination);
+
+        // Play from start time to end time
+        this.trimAudioSource.start(0, startTime, endTime - startTime);
+
+        // Update button
+        const icon = this.trimPlayBtn.querySelector('.material-icons');
+        const text = this.trimPlayBtn.childNodes[2];
+        if (icon) icon.textContent = 'stop';
+        if (text) text.textContent = ' Stop';
+
+        // Reset button when done
+        this.trimAudioSource.onended = () => {
+            if (icon) icon.textContent = 'play_arrow';
+            if (text) text.textContent = ' Preview';
+            this.trimAudioSource = null;
+        };
+    }
+
+    /**
+     * Apply trim to audio file
+     */
+    async applyTrim() {
+        if (this.trimFileIndex === null || !this.trimAudioBuffer || !this.trimAudioContext) {
+            return;
+        }
+
+        try {
+            const duration = this.trimAudioBuffer.duration;
+            const startTime = (this.trimStartPercent / 100) * duration;
+            const endTime = (this.trimEndPercent / 100) * duration;
+            const trimmedDuration = endTime - startTime;
+
+            // If no actual trimming (full range), just close
+            if (this.trimStartPercent === 0 && this.trimEndPercent === 100) {
+                this.closeTrimModal();
+                return;
+            }
+
+            // Create new trimmed buffer
+            const sampleRate = this.trimAudioBuffer.sampleRate;
+            const numberOfChannels = this.trimAudioBuffer.numberOfChannels;
+            const startFrame = Math.floor(startTime * sampleRate);
+            const endFrame = Math.floor(endTime * sampleRate);
+            const frameCount = endFrame - startFrame;
+
+            const trimmedBuffer = this.trimAudioContext.createBuffer(
+                numberOfChannels,
+                frameCount,
+                sampleRate
+            );
+
+            // Copy audio data for each channel
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                const sourceData = this.trimAudioBuffer.getChannelData(channel);
+                const trimmedData = trimmedBuffer.getChannelData(channel);
+                for (let i = 0; i < frameCount; i++) {
+                    trimmedData[i] = sourceData[startFrame + i];
+                }
+            }
+
+            // Convert trimmed buffer to blob
+            const audioBlob = await this.audioBufferToBlob(trimmedBuffer);
+
+            // Convert to data URL
+            const dataURL = await this.blobToDataURL(audioBlob);
+
+            // Update file in selectedFiles
+            const file = this.selectedFiles[this.trimFileIndex];
+            file.dataURL = dataURL;
+            file.fileSize = audioBlob.size;
+            file.fileName = file.fileName.replace(/(\.[^.]+)$/, '_trimmed$1');
+
+            // If it was uploaded to Google Drive, we need to re-upload
+            if (file.isArtifact && file.gdriveUrl) {
+                file.isArtifact = false;
+                file.gdriveUrl = null;
+                file.uploading = true;
+
+                // Upload new trimmed version
+                const syncStatus = this.storageManager.getSyncStatus();
+                if (syncStatus.mode === 'online') {
+                    this.uploadToGoogleDriveInBackground(audioBlob, file);
+                }
+            }
+
+            this.renderFilePreview();
+            this.closeTrimModal();
+
+            this.showNotification('Audio trimmed successfully', 'success');
+
+        } catch (error) {
+            console.error('Failed to trim audio:', error);
+            this.showNotification('Failed to trim audio', 'error');
+        }
+    }
+
+    /**
+     * Convert audio buffer to blob
+     */
+    async audioBufferToBlob(audioBuffer) {
+        const numberOfChannels = audioBuffer.numberOfChannels;
+        const sampleRate = audioBuffer.sampleRate;
+        const format = 1; // PCM
+        const bitDepth = 16;
+
+        const bytesPerSample = bitDepth / 8;
+        const blockAlign = numberOfChannels * bytesPerSample;
+
+        const data = [];
+        for (let channel = 0; channel < numberOfChannels; channel++) {
+            data.push(audioBuffer.getChannelData(channel));
+        }
+
+        const dataLength = audioBuffer.length * blockAlign;
+        const buffer = new ArrayBuffer(44 + dataLength);
+        const view = new DataView(buffer);
+
+        // RIFF chunk descriptor
+        this.writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + dataLength, true);
+        this.writeString(view, 8, 'WAVE');
+
+        // FMT sub-chunk
+        this.writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true); // fmt chunk size
+        view.setUint16(20, format, true); // audio format
+        view.setUint16(22, numberOfChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true); // byte rate
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitDepth, true);
+
+        // Data sub-chunk
+        this.writeString(view, 36, 'data');
+        view.setUint32(40, dataLength, true);
+
+        // Write interleaved audio data
+        let offset = 44;
+        for (let i = 0; i < audioBuffer.length; i++) {
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+                const sample = Math.max(-1, Math.min(1, data[channel][i]));
+                const int16 = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+                view.setInt16(offset, int16, true);
+                offset += 2;
+            }
+        }
+
+        return new Blob([buffer], { type: 'audio/wav' });
+    }
+
+    /**
+     * Write string to DataView
+     */
+    writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
     }
 
     scrollToBottom() {

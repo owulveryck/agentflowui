@@ -458,6 +458,57 @@
         </div>
     </div>
 
+    <!-- Trim Audio Modal -->
+    <div id="trim-audio-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content trim-modal-content">
+            <div class="modal-header">
+                <h2>Trim Audio</h2>
+                <button class="modal-close" id="trim-modal-close">
+                    <span class="material-icons">close</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="trim-controls">
+                    <div class="trim-waveform-container">
+                        <canvas id="trim-waveform" class="trim-waveform" width="600" height="120"></canvas>
+                        <div class="trim-region" id="trim-region">
+                            <div class="trim-handle trim-handle-start" id="trim-handle-start"></div>
+                            <div class="trim-handle trim-handle-end" id="trim-handle-end"></div>
+                        </div>
+                    </div>
+                    <div class="trim-info">
+                        <div class="trim-time-display">
+                            <span class="trim-label">Start:</span>
+                            <span class="trim-time" id="trim-start-time">0:00</span>
+                        </div>
+                        <div class="trim-time-display">
+                            <span class="trim-label">End:</span>
+                            <span class="trim-time" id="trim-end-time">0:00</span>
+                        </div>
+                        <div class="trim-time-display">
+                            <span class="trim-label">Duration:</span>
+                            <span class="trim-time trim-duration" id="trim-duration">0:00</span>
+                        </div>
+                    </div>
+                    <div class="trim-playback">
+                        <button id="trim-play-btn" class="btn btn-outline">
+                            <span class="material-icons">play_arrow</span>
+                            Preview
+                        </button>
+                    </div>
+                    <div class="trim-actions">
+                        <button id="trim-cancel-btn" class="btn btn-outline">Cancel</button>
+                        <button id="trim-apply-btn" class="btn btn-primary">
+                            <span class="material-icons">content_cut</span>
+                            Apply Trim
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="./static/js/config.js"></script>
     <script src="./static/js/googleDriveAuth.js"></script>
