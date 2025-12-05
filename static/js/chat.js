@@ -55,10 +55,93 @@ class ChatUI {
         // Search state
         this.searchQuery = '';
 
+        // Slash commands state
+        this.slashCommandsVisible = false;
+        this.selectedCommandIndex = 0;
+        this.filteredCommands = [];
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
         this.AUDIO_DURATION_THRESHOLD = 30 * 1000; // 30 seconds
+    }
+
+    /**
+     * Get available slash commands
+     */
+    getSlashCommands() {
+        return [
+            {
+                name: '/summarize',
+                icon: 'summarize',
+                description: 'Summarize the conversation so far',
+                action: 'template',
+                template: 'Please provide a concise summary of our conversation so far, highlighting the key points and decisions.'
+            },
+            {
+                name: '/translate',
+                icon: 'translate',
+                description: 'Translate the last message to another language',
+                action: 'template',
+                template: 'Please translate the last message to [language]:\n\n'
+            },
+            {
+                name: '/explain',
+                icon: 'school',
+                description: 'Explain the last response in simpler terms',
+                action: 'template',
+                template: 'Please explain your last response in simpler terms, as if explaining to someone without technical knowledge.'
+            },
+            {
+                name: '/code',
+                icon: 'code',
+                description: 'Generate code based on requirements',
+                action: 'template',
+                template: 'Please write code for the following:\n\n'
+            },
+            {
+                name: '/debug',
+                icon: 'bug_report',
+                description: 'Help debug code or find issues',
+                action: 'template',
+                template: 'Please help me debug this code and identify any issues:\n\n```\n\n```'
+            },
+            {
+                name: '/review',
+                icon: 'rate_review',
+                description: 'Review code for best practices and improvements',
+                action: 'template',
+                template: 'Please review this code and suggest improvements:\n\n```\n\n```'
+            },
+            {
+                name: '/improve',
+                icon: 'auto_fix_high',
+                description: 'Suggest improvements for the conversation topic',
+                action: 'template',
+                template: 'Based on what we\'ve discussed, please suggest improvements or next steps.'
+            },
+            {
+                name: '/eli5',
+                icon: 'child_care',
+                description: 'Explain like I\'m 5 years old',
+                action: 'template',
+                template: 'Please explain this concept as if I\'m 5 years old: '
+            },
+            {
+                name: '/pros-cons',
+                icon: 'compare',
+                description: 'List pros and cons of a topic',
+                action: 'template',
+                template: 'Please provide a detailed pros and cons list for: '
+            },
+            {
+                name: '/brainstorm',
+                icon: 'lightbulb',
+                description: 'Brainstorm ideas on a topic',
+                action: 'template',
+                template: 'Let\'s brainstorm creative ideas for: '
+            }
+        ];
     }
 
     /**
@@ -357,6 +440,10 @@ class ChatUI {
 
         // Markdown toolbar
         this.markdownToolbar = document.getElementById('markdown-toolbar');
+
+        // Slash commands
+        this.slashCommandsDropdown = document.getElementById('slash-commands-dropdown');
+        this.slashCommandsList = document.getElementById('slash-commands-list');
     }
 
     /**
@@ -839,6 +926,30 @@ class ChatUI {
                 });
             });
         }
+
+        // Slash commands detection
+        this.userInput.addEventListener('input', (e) => {
+            this.handleSlashCommandInput();
+        });
+
+        // Slash commands keyboard navigation
+        this.userInput.addEventListener('keydown', (e) => {
+            if (this.slashCommandsVisible) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.navigateSlashCommands('down');
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.navigateSlashCommands('up');
+                } else if (e.key === 'Enter' && this.filteredCommands.length > 0) {
+                    e.preventDefault();
+                    this.executeSlashCommand(this.filteredCommands[this.selectedCommandIndex]);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.hideSlashCommands();
+                }
+            }
+        });
     }
 
     /**
@@ -3694,6 +3805,157 @@ class ChatUI {
 
         // Trigger input event to auto-resize textarea
         textarea.dispatchEvent(new Event('input'));
+    }
+
+    /**
+     * Handle slash command input detection
+     */
+    handleSlashCommandInput() {
+        const input = this.userInput.value;
+        const cursorPos = this.userInput.selectionStart;
+
+        // Find the start of the current line
+        const textBeforeCursor = input.substring(0, cursorPos);
+        const lastNewline = textBeforeCursor.lastIndexOf('\n');
+        const currentLineStart = lastNewline + 1;
+        const currentLine = input.substring(currentLineStart, cursorPos);
+
+        // Check if line starts with "/" and has no spaces before it
+        if (currentLine.startsWith('/') && !currentLine.substring(0, currentLine.indexOf('/')).includes(' ')) {
+            const query = currentLine.substring(1).toLowerCase();
+            const commands = this.getSlashCommands();
+
+            // Filter commands based on query
+            this.filteredCommands = commands.filter(cmd =>
+                cmd.name.toLowerCase().includes('/' + query)
+            );
+
+            if (this.filteredCommands.length > 0) {
+                this.selectedCommandIndex = 0;
+                this.showSlashCommands();
+                this.renderSlashCommands();
+            } else {
+                this.hideSlashCommands();
+            }
+        } else {
+            this.hideSlashCommands();
+        }
+    }
+
+    /**
+     * Show slash commands dropdown
+     */
+    showSlashCommands() {
+        this.slashCommandsVisible = true;
+        this.slashCommandsDropdown.classList.remove('hidden');
+    }
+
+    /**
+     * Hide slash commands dropdown
+     */
+    hideSlashCommands() {
+        this.slashCommandsVisible = false;
+        this.slashCommandsDropdown.classList.add('hidden');
+        this.selectedCommandIndex = 0;
+    }
+
+    /**
+     * Render slash commands in dropdown
+     */
+    renderSlashCommands() {
+        if (this.filteredCommands.length === 0) {
+            this.slashCommandsList.innerHTML = '<div class="slash-commands-empty">No commands found</div>';
+            return;
+        }
+
+        let html = '';
+        this.filteredCommands.forEach((cmd, index) => {
+            const isSelected = index === this.selectedCommandIndex;
+            html += `
+                <div class="slash-command-item ${isSelected ? 'selected' : ''}" data-index="${index}">
+                    <div class="slash-command-icon">
+                        <span class="material-icons">${cmd.icon}</span>
+                    </div>
+                    <div class="slash-command-info">
+                        <div class="slash-command-title">
+                            <span class="slash-command-name">${cmd.name}</span>
+                        </div>
+                        <div class="slash-command-desc">${this.escapeHtml(cmd.description)}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        this.slashCommandsList.innerHTML = html;
+
+        // Add click listeners
+        document.querySelectorAll('.slash-command-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const index = parseInt(item.dataset.index);
+                this.executeSlashCommand(this.filteredCommands[index]);
+            });
+        });
+    }
+
+    /**
+     * Navigate slash commands with arrow keys
+     */
+    navigateSlashCommands(direction) {
+        if (this.filteredCommands.length === 0) return;
+
+        if (direction === 'down') {
+            this.selectedCommandIndex = (this.selectedCommandIndex + 1) % this.filteredCommands.length;
+        } else if (direction === 'up') {
+            this.selectedCommandIndex = (this.selectedCommandIndex - 1 + this.filteredCommands.length) % this.filteredCommands.length;
+        }
+
+        this.renderSlashCommands();
+
+        // Scroll selected item into view
+        const selectedItem = this.slashCommandsList.querySelector('.slash-command-item.selected');
+        if (selectedItem) {
+            selectedItem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    /**
+     * Execute slash command
+     */
+    executeSlashCommand(command) {
+        const input = this.userInput.value;
+        const cursorPos = this.userInput.selectionStart;
+
+        // Find the slash command in the text
+        const textBeforeCursor = input.substring(0, cursorPos);
+        const lastNewline = textBeforeCursor.lastIndexOf('\n');
+        const currentLineStart = lastNewline + 1;
+        const slashPos = input.indexOf('/', currentLineStart);
+
+        // Find end of slash command
+        let slashEnd = slashPos;
+        while (slashEnd < input.length && input[slashEnd] !== ' ' && input[slashEnd] !== '\n') {
+            slashEnd++;
+        }
+
+        // Replace slash command with template
+        const before = input.substring(0, slashPos);
+        const after = input.substring(slashEnd);
+        const newText = before + command.template + after;
+
+        this.userInput.value = newText;
+
+        // Position cursor at end of template or at placeholder
+        const newCursorPos = before.length + command.template.length;
+        this.userInput.setSelectionRange(newCursorPos, newCursorPos);
+
+        // Hide dropdown
+        this.hideSlashCommands();
+
+        // Focus input
+        this.userInput.focus();
+
+        // Show notification
+        this.showNotification(`Inserted ${command.name}`, 'success');
     }
 
     scrollToBottom() {
