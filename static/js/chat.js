@@ -354,6 +354,9 @@ class ChatUI {
 
         // Dark mode toggle
         this.darkModeToggle = document.getElementById('dark-mode-toggle');
+
+        // Markdown toolbar
+        this.markdownToolbar = document.getElementById('markdown-toolbar');
     }
 
     /**
@@ -808,6 +811,33 @@ class ChatUI {
 
             // Initialize dark mode from localStorage or system preference
             this.initializeDarkMode();
+        }
+
+        // Markdown toolbar
+        if (this.markdownToolbar) {
+            // Show/hide toolbar on input focus/blur
+            this.userInput.addEventListener('focus', () => {
+                this.markdownToolbar.classList.remove('hidden');
+            });
+
+            // Don't hide immediately on blur - let clicks register first
+            this.userInput.addEventListener('blur', () => {
+                setTimeout(() => {
+                    if (document.activeElement !== this.userInput) {
+                        this.markdownToolbar.classList.add('hidden');
+                    }
+                }, 200);
+            });
+
+            // Toolbar button clicks
+            document.querySelectorAll('.toolbar-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const format = btn.dataset.format;
+                    this.applyMarkdownFormat(format);
+                    this.userInput.focus();
+                });
+            });
         }
     }
 
@@ -3581,6 +3611,89 @@ class ChatUI {
                 icon.textContent = isDark ? 'light_mode' : 'dark_mode';
             }
         }
+    }
+
+    /**
+     * Apply markdown formatting to selected text or at cursor
+     */
+    applyMarkdownFormat(format) {
+        const textarea = this.userInput;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = textarea.value.substring(start, end);
+        const beforeText = textarea.value.substring(0, start);
+        const afterText = textarea.value.substring(end);
+
+        let newText = '';
+        let newCursorPos = start;
+
+        switch (format) {
+            case 'bold':
+                newText = `${beforeText}**${selectedText || 'bold text'}**${afterText}`;
+                newCursorPos = selectedText ? end + 4 : start + 2;
+                break;
+
+            case 'italic':
+                newText = `${beforeText}*${selectedText || 'italic text'}*${afterText}`;
+                newCursorPos = selectedText ? end + 2 : start + 1;
+                break;
+
+            case 'code':
+                newText = `${beforeText}\`${selectedText || 'code'}\`${afterText}`;
+                newCursorPos = selectedText ? end + 2 : start + 1;
+                break;
+
+            case 'heading':
+                // Add heading at start of line
+                const lineStart = beforeText.lastIndexOf('\n') + 1;
+                const lineText = textarea.value.substring(lineStart);
+                newText = beforeText.substring(0, lineStart) + `## ${lineText}`;
+                newCursorPos = lineStart + 3;
+                break;
+
+            case 'list':
+                // Add bullet point at start of line
+                const listLineStart = beforeText.lastIndexOf('\n') + 1;
+                const listLineText = textarea.value.substring(listLineStart);
+                newText = beforeText.substring(0, listLineStart) + `- ${listLineText}`;
+                newCursorPos = listLineStart + 2;
+                break;
+
+            case 'numbered':
+                // Add numbered list at start of line
+                const numLineStart = beforeText.lastIndexOf('\n') + 1;
+                const numLineText = textarea.value.substring(numLineStart);
+                newText = beforeText.substring(0, numLineStart) + `1. ${numLineText}`;
+                newCursorPos = numLineStart + 3;
+                break;
+
+            case 'quote':
+                // Add quote at start of line
+                const quoteLineStart = beforeText.lastIndexOf('\n') + 1;
+                const quoteLineText = textarea.value.substring(quoteLineStart);
+                newText = beforeText.substring(0, quoteLineStart) + `> ${quoteLineText}`;
+                newCursorPos = quoteLineStart + 2;
+                break;
+
+            case 'link':
+                newText = `${beforeText}[${selectedText || 'link text'}](url)${afterText}`;
+                newCursorPos = selectedText ? start + selectedText.length + 3 : start + 1;
+                break;
+
+            case 'codeblock':
+                newText = `${beforeText}\`\`\`\n${selectedText || 'code'}\n\`\`\`${afterText}`;
+                newCursorPos = selectedText ? end + 4 : start + 4;
+                break;
+
+            default:
+                return;
+        }
+
+        textarea.value = newText;
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+
+        // Trigger input event to auto-resize textarea
+        textarea.dispatchEvent(new Event('input'));
     }
 
     scrollToBottom() {
