@@ -106,9 +106,40 @@
                 <div class="search-container">
                     <span class="material-icons search-icon">search</span>
                     <input type="text" id="conversation-search" class="conversation-search" placeholder="Search conversations...">
+                    <button id="search-filters-btn" class="icon-btn-clear" title="Advanced filters">
+                        <span class="material-icons">tune</span>
+                    </button>
                     <button id="clear-search" class="icon-btn-clear hidden">
                         <span class="material-icons">close</span>
                     </button>
+                </div>
+
+                <!-- Advanced Search Filters -->
+                <div id="search-filters" class="search-filters hidden">
+                    <div class="filter-section">
+                        <label class="filter-label">Date Range</label>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="date" data-value="all">All</button>
+                            <button class="filter-btn" data-filter="date" data-value="today">Today</button>
+                            <button class="filter-btn" data-filter="date" data-value="week">This Week</button>
+                            <button class="filter-btn" data-filter="date" data-value="month">This Month</button>
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <label class="filter-label">Messages</label>
+                        <div class="filter-buttons">
+                            <button class="filter-btn active" data-filter="messages" data-value="all">All</button>
+                            <button class="filter-btn" data-filter="messages" data-value="short">1-5</button>
+                            <button class="filter-btn" data-filter="messages" data-value="medium">6-20</button>
+                            <button class="filter-btn" data-filter="messages" data-value="long">20+</button>
+                        </div>
+                    </div>
+                    <div class="filter-actions">
+                        <button id="clear-all-filters" class="filter-action-btn">
+                            <span class="material-icons">clear_all</span>
+                            Clear All Filters
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Tags Filter -->

@@ -75,6 +75,12 @@ class ChatUI {
         this.availableTags = [];
         this.selectedTagFilter = null; // null or tag name
 
+        // Advanced search filters state
+        this.searchFilters = {
+            date: 'all', // all, today, week, month
+            messages: 'all' // all, short (1-5), medium (6-20), long (20+)
+        };
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -482,6 +488,11 @@ class ChatUI {
         // Tags
         this.tagsFilterList = document.getElementById('tags-filter-list');
         this.clearTagFilterBtn = document.getElementById('clear-tag-filter');
+
+        // Advanced search filters
+        this.searchFiltersBtn = document.getElementById('search-filters-btn');
+        this.searchFiltersPanel = document.getElementById('search-filters');
+        this.clearAllFiltersBtn = document.getElementById('clear-all-filters');
     }
 
     /**
@@ -1055,6 +1066,29 @@ class ChatUI {
 
         // Initialize counter
         this.updateCharTokenCounter();
+
+        // Advanced search filters
+        if (this.searchFiltersBtn) {
+            this.searchFiltersBtn.addEventListener('click', () => {
+                this.toggleSearchFilters();
+            });
+        }
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filterType = btn.dataset.filter;
+                const filterValue = btn.dataset.value;
+                this.applyFilter(filterType, filterValue);
+            });
+        });
+
+        // Clear all filters
+        if (this.clearAllFiltersBtn) {
+            this.clearAllFiltersBtn.addEventListener('click', () => {
+                this.clearAllFilters();
+            });
+        }
     }
 
     /**
@@ -1427,11 +1461,85 @@ class ChatUI {
             return titleMatch || messagesMatch;
         });
 
+        // Filter by date range
+        if (this.searchFilters.date !== 'all') {
+            filtered = filtered.filter(id => {
+                const conv = this.conversations[id];
+                const convDate = new Date(conv.lastModified || conv.createdAt || 0);
+                const now = new Date();
+
+                switch (this.searchFilters.date) {
+                    case 'today':
+                        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        return convDate >= today;
+
+                    case 'week':
+                        const weekAgo = new Date(now);
+                        weekAgo.setDate(weekAgo.getDate() - 7);
+                        return convDate >= weekAgo;
+
+                    case 'month':
+                        const monthAgo = new Date(now);
+                        monthAgo.setMonth(monthAgo.getMonth() - 1);
+                        return convDate >= monthAgo;
+
+                    default:
+                        return true;
+                }
+            });
+        }
+
+        // Filter by message count
+        if (this.searchFilters.messages !== 'all') {
+            filtered = filtered.filter(id => {
+                const conv = this.conversations[id];
+                const messageCount = conv.messages ? conv.messages.length : 0;
+
+                switch (this.searchFilters.messages) {
+                    case 'short':
+                        return messageCount >= 1 && messageCount <= 5;
+
+                    case 'medium':
+                        return messageCount >= 6 && messageCount <= 20;
+
+                    case 'long':
+                        return messageCount > 20;
+
+                    default:
+                        return true;
+                }
+            });
+        }
+
         if (filtered.length === 0) {
             const folderName = this.selectedFolderId === 'all' ? '' :
                 `in ${this.folders.find(f => f.id === this.selectedFolderId)?.name || 'this folder'} `;
             const tagName = this.selectedTagFilter ? `with tag "${this.selectedTagFilter}" ` : '';
-            this.conversationsList.innerHTML = `<div class="empty-state">No conversations found ${tagName}${folderName}<br><small>${this.searchQuery ? 'Try a different search' : 'Start a new conversation'}</small></div>`;
+
+            // Add date filter info
+            let dateFilter = '';
+            if (this.searchFilters.date !== 'all') {
+                const dateLabels = {
+                    today: 'from today',
+                    week: 'from this week',
+                    month: 'from this month'
+                };
+                dateFilter = dateLabels[this.searchFilters.date] || '';
+            }
+
+            // Add message count filter info
+            let messageFilter = '';
+            if (this.searchFilters.messages !== 'all') {
+                const messageLabels = {
+                    short: 'with 1-5 messages',
+                    medium: 'with 6-20 messages',
+                    long: 'with 20+ messages'
+                };
+                messageFilter = messageLabels[this.searchFilters.messages] || '';
+            }
+
+            const activeFilters = [tagName, folderName, dateFilter, messageFilter].filter(f => f).join(' ');
+            this.conversationsList.innerHTML = `<div class="empty-state">No conversations found ${activeFilters}<br><small>${this.searchQuery ? 'Try a different search' : activeFilters ? 'Try clearing some filters' : 'Start a new conversation'}</small></div>`;
             return;
         }
 
@@ -4854,6 +4962,93 @@ class ChatUI {
         this.renderConversationsList();
 
         this.showNotification(`Tag "${tag}" removed`, 'success');
+    }
+
+    /**
+     * Toggle search filters panel
+     */
+    toggleSearchFilters() {
+        if (!this.searchFiltersPanel) return;
+
+        this.searchFiltersPanel.classList.toggle('hidden');
+
+        // Update button state
+        if (this.searchFiltersBtn) {
+            this.searchFiltersBtn.classList.toggle('active');
+        }
+    }
+
+    /**
+     * Apply search filter
+     */
+    applyFilter(filterType, filterValue) {
+        // Update filter state
+        this.searchFilters[filterType] = filterValue;
+
+        // Update button states
+        document.querySelectorAll(`.filter-btn[data-filter="${filterType}"]`).forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === filterValue);
+        });
+
+        // Re-render conversations list with new filter
+        this.renderConversationsList();
+
+        // Show notification
+        const filterLabels = {
+            date: {
+                all: 'All dates',
+                today: 'Today',
+                week: 'This week',
+                month: 'This month'
+            },
+            messages: {
+                all: 'All conversations',
+                short: '1-5 messages',
+                medium: '6-20 messages',
+                long: '20+ messages'
+            }
+        };
+
+        const label = filterLabels[filterType]?.[filterValue] || filterValue;
+        this.showNotification(`Filter applied: ${label}`, 'success');
+    }
+
+    /**
+     * Clear all search filters
+     */
+    clearAllFilters() {
+        // Reset all filters to default
+        this.searchFilters = {
+            date: 'all',
+            messages: 'all'
+        };
+
+        // Reset button states
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            const isDefault = btn.dataset.value === 'all';
+            btn.classList.toggle('active', isDefault);
+        });
+
+        // Clear other filters too
+        this.searchQuery = '';
+        this.selectedTagFilter = null;
+        this.selectedFolderId = 'all';
+
+        // Update UI
+        this.conversationSearch.value = '';
+        this.clearSearchBtn.classList.add('hidden');
+        this.clearTagFilterBtn.classList.add('hidden');
+
+        // Update folder selection
+        document.querySelectorAll('.folder-item').forEach(item => {
+            item.classList.toggle('active', item.dataset.folder === 'all');
+        });
+
+        // Re-render
+        this.renderTagsFilter();
+        this.renderConversationsList();
+
+        this.showNotification('All filters cleared', 'success');
     }
 
     scrollToBottom() {
