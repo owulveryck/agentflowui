@@ -575,6 +575,14 @@ class ChatUI {
                                             data: item.audio._gdriveUrl
                                         }
                                     };
+                                } else if (item.audio._uploadPending) {
+                                    // Upload still pending - don't save (will be updated when upload completes)
+                                    return {
+                                        type: 'audio',
+                                        audio: {
+                                            data: '[Audio upload in progress - not saved]'
+                                        }
+                                    };
                                 } else if (item.audio.data && !item.audio.data.startsWith('gdrive://')) {
                                     // Remove inline base64 data
                                     return {
@@ -593,6 +601,14 @@ class ChatUI {
                                         type: 'image_url',
                                         image_url: {
                                             url: item.image_url._gdriveUrl
+                                        }
+                                    };
+                                } else if (item.image_url._uploadPending) {
+                                    // Upload still pending - don't save (will be updated when upload completes)
+                                    return {
+                                        type: 'image_url',
+                                        image_url: {
+                                            url: '[Image upload in progress - not saved]'
                                         }
                                     };
                                 } else if (item.image_url.url && !item.image_url.url.startsWith('gdrive://')) {
@@ -1350,28 +1366,20 @@ class ChatUI {
                 { type: 'text', text: text || 'Attached files' }
             ];
 
-            // Add files - use gdriveUrl if available, otherwise local dataURL
+            // Add files - use local dataURL immediately, track pending uploads
             for (const file of this.selectedFiles) {
-                // Check if still uploading
-                if (file.uploading) {
-                    this.showNotification('Please wait for uploads to complete', 'warning');
-                    return;
-                }
-
-                // Prefer Google Drive URL if available
-                const useGdriveUrl = file.gdriveUrl;
+                // Always use local dataURL (available immediately)
                 let dataURL = file.dataURL;
-                let gdriveUrl = null;
+                let gdriveUrl = file.gdriveUrl || null; // Use gdrive URL if upload completed
 
-                if (useGdriveUrl) {
-                    gdriveUrl = file.gdriveUrl;
-                    // Download from Google Drive for immediate use
+                // If upload completed, download from Google Drive for better long-term storage
+                if (gdriveUrl) {
                     try {
                         dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
                     } catch (error) {
-                        console.error('Failed to download Google Drive file:', error);
-                        this.showNotification(`Failed to load file from Google Drive: ${error.message}`, 'error');
-                        return;
+                        console.warn('Failed to download from Google Drive, using local data:', error);
+                        // Fall back to local dataURL
+                        gdriveUrl = null;
                     }
                 }
 
@@ -1380,9 +1388,12 @@ class ChatUI {
                         type: 'image_url',
                         image_url: { url: dataURL }
                     };
-                    // Keep original gdrive URL for storage
+                    // Keep original gdrive URL for storage if available
                     if (gdriveUrl) {
                         imageData.image_url._gdriveUrl = gdriveUrl;
+                    } else if (file.uploading) {
+                        // Mark for future update when upload completes
+                        imageData.image_url._uploadPending = file;
                     }
                     messageContent.push(imageData);
                 } else if (file.fileType.startsWith('audio/')) {
@@ -1390,9 +1401,12 @@ class ChatUI {
                         type: 'audio',
                         audio: { data: dataURL }
                     };
-                    // Keep original gdrive URL for storage
+                    // Keep original gdrive URL for storage if available
                     if (gdriveUrl) {
                         audioData.audio._gdriveUrl = gdriveUrl;
+                    } else if (file.uploading) {
+                        // Mark for future update when upload completes
+                        audioData.audio._uploadPending = file;
                     }
                     messageContent.push(audioData);
                 }
@@ -1927,6 +1941,9 @@ class ChatUI {
 
             console.log('File uploaded to Google Drive:', gdriveUrl);
 
+            // Update any messages that were sent while this file was uploading
+            this.updatePendingUploads(fileObj, gdriveUrl);
+
             // Re-render to update badge
             this.renderFilePreview();
         } catch (error) {
@@ -1936,6 +1953,38 @@ class ChatUI {
             fileObj.temporary = true;
             this.showNotification(`Upload failed: ${fileObj.fileName}`, 'warning');
             this.renderFilePreview();
+        }
+    }
+
+    /**
+     * Update messages with pending uploads when upload completes
+     */
+    updatePendingUploads(fileObj, gdriveUrl) {
+        let updated = false;
+
+        for (const msg of this.messages) {
+            if (Array.isArray(msg.content)) {
+                for (const item of msg.content) {
+                    // Update images
+                    if (item.type === 'image_url' && item.image_url?._uploadPending === fileObj) {
+                        item.image_url._gdriveUrl = gdriveUrl;
+                        delete item.image_url._uploadPending;
+                        updated = true;
+                    }
+                    // Update audio
+                    if (item.type === 'audio' && item.audio?._uploadPending === fileObj) {
+                        item.audio._gdriveUrl = gdriveUrl;
+                        delete item.audio._uploadPending;
+                        updated = true;
+                    }
+                }
+            }
+        }
+
+        // Save conversation if we updated any messages
+        if (updated) {
+            console.log('Updated pending uploads with Google Drive URL');
+            this.saveConversations();
         }
     }
 
