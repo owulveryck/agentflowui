@@ -957,7 +957,7 @@ class ChatUI {
      */
     renderMessage(msg, index) {
         const isUser = msg.role === 'user';
-        const content = typeof msg.content === 'string' ? msg.content : '';
+        const content = msg.content || '';
 
         return `
             <div class="message ${isUser ? 'user-message' : 'assistant-message'}" data-index="${index}">
@@ -985,15 +985,19 @@ class ChatUI {
     renderMessageContent(content) {
         if (!content) return '';
 
+        console.log('renderMessageContent called with:', typeof content, Array.isArray(content));
+
         // Handle multimodal content (array of items)
         if (Array.isArray(content)) {
             let html = '';
 
             for (const item of content) {
+                console.log('Processing item:', item.type, item);
                 if (item.type === 'text') {
                     html += this.renderMarkdown(item.text);
                 } else if (item.type === 'image_url' && item.image_url) {
                     const url = item.image_url.url;
+                    console.log('Rendering image with URL:', url.substring(0, 50) + '...');
                     if (url !== '[Large image data removed to save storage space]') {
                         html += `<div class="message-image"><img src="${this.escapeHtml(url)}" alt="Attached image" /></div>`;
                     } else {
@@ -1376,6 +1380,7 @@ class ChatUI {
                     if (gdriveUrl) {
                         imageData.image_url._gdriveUrl = gdriveUrl;
                     }
+                    console.log('Adding image to message, URL:', dataURL.substring(0, 50) + '...', 'gdrive:', gdriveUrl);
                     messageContent.push(imageData);
                 } else if (file.fileType.startsWith('audio/')) {
                     const audioData = {
