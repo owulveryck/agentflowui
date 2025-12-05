@@ -81,6 +81,10 @@ class ChatUI {
             messages: 'all' // all, short (1-5), medium (6-20), long (20+)
         };
 
+        // Bulk operations state
+        this.bulkMode = false;
+        this.selectedConversations = new Set();
+
         // Constants
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
@@ -493,6 +497,17 @@ class ChatUI {
         this.searchFiltersBtn = document.getElementById('search-filters-btn');
         this.searchFiltersPanel = document.getElementById('search-filters');
         this.clearAllFiltersBtn = document.getElementById('clear-all-filters');
+
+        // Bulk operations
+        this.enableBulkModeBtn = document.getElementById('enable-bulk-mode-btn');
+        this.bulkActionsToolbar = document.getElementById('bulk-actions-toolbar');
+        this.selectAllCheckbox = document.getElementById('select-all-conversations');
+        this.bulkSelectionCount = document.getElementById('bulk-selection-count');
+        this.bulkMoveBtn = document.getElementById('bulk-move-btn');
+        this.bulkTagBtn = document.getElementById('bulk-tag-btn');
+        this.bulkExportBtn = document.getElementById('bulk-export-btn');
+        this.bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        this.cancelBulkBtn = document.getElementById('cancel-bulk-btn');
     }
 
     /**
@@ -1089,6 +1104,53 @@ class ChatUI {
                 this.clearAllFilters();
             });
         }
+
+        // Bulk operations
+        if (this.enableBulkModeBtn) {
+            this.enableBulkModeBtn.addEventListener('click', () => {
+                if (this.bulkMode) {
+                    this.exitBulkMode();
+                } else {
+                    this.enterBulkMode();
+                }
+            });
+        }
+
+        if (this.selectAllCheckbox) {
+            this.selectAllCheckbox.addEventListener('change', (e) => {
+                this.toggleSelectAll(e.target.checked);
+            });
+        }
+
+        if (this.bulkMoveBtn) {
+            this.bulkMoveBtn.addEventListener('click', () => {
+                this.bulkMoveToFolder();
+            });
+        }
+
+        if (this.bulkTagBtn) {
+            this.bulkTagBtn.addEventListener('click', () => {
+                this.bulkAddTag();
+            });
+        }
+
+        if (this.bulkExportBtn) {
+            this.bulkExportBtn.addEventListener('click', () => {
+                this.bulkExport();
+            });
+        }
+
+        if (this.bulkDeleteBtn) {
+            this.bulkDeleteBtn.addEventListener('click', () => {
+                this.bulkDelete();
+            });
+        }
+
+        if (this.cancelBulkBtn) {
+            this.cancelBulkBtn.addEventListener('click', () => {
+                this.exitBulkMode();
+            });
+        }
     }
 
     /**
@@ -1586,6 +1648,9 @@ class ChatUI {
                 const pinIcon = isPinned ? 'push_pin' : 'push_pin';
                 const pinTitle = isPinned ? 'Unpin' : 'Pin';
 
+                // Check if conversation is selected (bulk mode)
+                const isSelected = this.selectedConversations.has(id);
+
                 // Render tags
                 let tagsHtml = '';
                 if (conv.tags && conv.tags.length > 0) {
@@ -1601,8 +1666,13 @@ class ChatUI {
                     tagsHtml += '</div>';
                 }
 
+                // Add checkbox in bulk mode
+                const checkboxHtml = this.bulkMode ?
+                    `<input type="checkbox" class="conversation-checkbox" data-id="${id}" ${isSelected ? 'checked' : ''}>` : '';
+
                 html += `
-                    <div class="conversation-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''}" data-id="${id}">
+                    <div class="conversation-item ${isActive ? 'active' : ''} ${isPinned ? 'pinned' : ''} ${this.bulkMode ? 'bulk-mode' : ''} ${isSelected ? 'selected' : ''}" data-id="${id}">
+                        ${checkboxHtml}
                         <div class="conversation-content">
                             <div class="conversation-title">
                                 ${isPinned ? '<span class="material-icons pin-indicator">push_pin</span>' : ''}
@@ -1642,9 +1712,39 @@ class ChatUI {
         // Add event listeners
         document.querySelectorAll('.conversation-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                if (!e.target.closest('.conversation-actions')) {
+                // Don't load conversation if clicking checkbox or actions
+                if (e.target.closest('.conversation-checkbox') || e.target.closest('.conversation-actions')) {
+                    return;
+                }
+
+                // In bulk mode, clicking conversation toggles selection
+                if (this.bulkMode) {
+                    this.toggleConversationSelection(item.dataset.id);
+                } else {
                     this.loadConversation(item.dataset.id);
                 }
+            });
+        });
+
+        // Add event listeners for checkboxes (bulk mode)
+        document.querySelectorAll('.conversation-checkbox').forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const id = checkbox.dataset.id;
+                if (checkbox.checked) {
+                    this.selectedConversations.add(id);
+                    // Enter bulk mode if this is the first selection
+                    if (!this.bulkMode) {
+                        this.enterBulkMode();
+                    }
+                } else {
+                    this.selectedConversations.delete(id);
+                    // Exit bulk mode if no selections left
+                    if (this.selectedConversations.size === 0) {
+                        this.exitBulkMode();
+                    }
+                }
+                this.updateBulkUI();
             });
         });
 
@@ -5049,6 +5149,249 @@ class ChatUI {
         this.renderConversationsList();
 
         this.showNotification('All filters cleared', 'success');
+    }
+
+    /**
+     * Enter bulk selection mode
+     */
+    enterBulkMode() {
+        this.bulkMode = true;
+        this.bulkActionsToolbar.classList.remove('hidden');
+        this.renderConversationsList();
+    }
+
+    /**
+     * Exit bulk selection mode
+     */
+    exitBulkMode() {
+        this.bulkMode = false;
+        this.selectedConversations.clear();
+        this.bulkActionsToolbar.classList.add('hidden');
+        if (this.selectAllCheckbox) {
+            this.selectAllCheckbox.checked = false;
+        }
+        this.renderConversationsList();
+    }
+
+    /**
+     * Update bulk UI (selection count, checkboxes)
+     */
+    updateBulkUI() {
+        const count = this.selectedConversations.size;
+        this.bulkSelectionCount.textContent = `${count} selected`;
+
+        // Update select all checkbox state
+        const filtered = Object.keys(this.conversations).filter(id => {
+            // Apply same filters as renderConversationsList
+            const conv = this.conversations[id];
+
+            if (this.selectedFolderId !== 'all' && conv.folderId !== this.selectedFolderId) return false;
+            if (this.selectedTagFilter && (!conv.tags || !conv.tags.includes(this.selectedTagFilter))) return false;
+
+            return true;
+        });
+
+        if (this.selectAllCheckbox) {
+            this.selectAllCheckbox.checked = count > 0 && count === filtered.length;
+            this.selectAllCheckbox.indeterminate = count > 0 && count < filtered.length;
+        }
+
+        // Update conversation items
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            const id = item.dataset.id;
+            const isSelected = this.selectedConversations.has(id);
+            item.classList.toggle('selected', isSelected);
+
+            const checkbox = item.querySelector('.conversation-checkbox');
+            if (checkbox) {
+                checkbox.checked = isSelected;
+            }
+        });
+    }
+
+    /**
+     * Toggle select all conversations
+     */
+    toggleSelectAll(checked) {
+        if (checked) {
+            // Select all visible conversations
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                this.selectedConversations.add(item.dataset.id);
+            });
+
+            if (!this.bulkMode) {
+                this.enterBulkMode();
+            }
+        } else {
+            // Deselect all
+            this.selectedConversations.clear();
+            this.exitBulkMode();
+        }
+
+        this.updateBulkUI();
+    }
+
+    /**
+     * Toggle individual conversation selection
+     */
+    toggleConversationSelection(id) {
+        if (this.selectedConversations.has(id)) {
+            this.selectedConversations.delete(id);
+            if (this.selectedConversations.size === 0) {
+                this.exitBulkMode();
+            }
+        } else {
+            this.selectedConversations.add(id);
+            if (!this.bulkMode) {
+                this.enterBulkMode();
+            }
+        }
+
+        this.updateBulkUI();
+    }
+
+    /**
+     * Bulk move conversations to folder
+     */
+    bulkMoveToFolder() {
+        if (this.selectedConversations.size === 0) return;
+
+        // Build folder options
+        const options = [
+            { id: 'all', name: 'All Conversations' },
+            ...this.folders
+        ];
+
+        let folderList = options.map((f, i) => `${i + 1}. ${f.name}`).join('\n');
+        const choice = prompt(`Move ${this.selectedConversations.size} conversation(s) to:\n\n${folderList}\n\nEnter folder number:`);
+
+        if (!choice) return;
+
+        const index = parseInt(choice) - 1;
+        if (isNaN(index) || index < 0 || index >= options.length) {
+            this.showNotification('Invalid folder number', 'error');
+            return;
+        }
+
+        const folderId = options[index].id;
+        const folderName = options[index].name;
+
+        // Move all selected conversations
+        this.selectedConversations.forEach(id => {
+            const conv = this.conversations[id];
+            if (!conv) return;
+
+            if (folderId === 'all') {
+                delete conv.folderId;
+            } else {
+                conv.folderId = folderId;
+            }
+            conv.lastModified = Date.now();
+        });
+
+        this.saveConversations();
+        this.renderFolders();
+        this.exitBulkMode();
+
+        this.showNotification(`${this.selectedConversations.size} conversation(s) moved to "${folderName}"`, 'success');
+    }
+
+    /**
+     * Bulk add tag to conversations
+     */
+    bulkAddTag() {
+        if (this.selectedConversations.size === 0) return;
+
+        const tag = prompt(`Add tag to ${this.selectedConversations.size} conversation(s):`);
+        if (!tag || !tag.trim()) return;
+
+        const normalizedTag = tag.trim().toLowerCase();
+
+        // Add tag to all selected conversations
+        this.selectedConversations.forEach(id => {
+            const conv = this.conversations[id];
+            if (!conv) return;
+
+            if (!conv.tags) {
+                conv.tags = [];
+            }
+
+            if (!conv.tags.includes(normalizedTag)) {
+                conv.tags.push(normalizedTag);
+                conv.lastModified = Date.now();
+            }
+        });
+
+        this.saveConversations();
+        this.updateAvailableTags();
+        this.renderTagsFilter();
+        this.exitBulkMode();
+
+        this.showNotification(`Tag "${normalizedTag}" added to ${this.selectedConversations.size} conversation(s)`, 'success');
+    }
+
+    /**
+     * Bulk export conversations
+     */
+    async bulkExport() {
+        if (this.selectedConversations.size === 0) return;
+
+        const count = this.selectedConversations.size;
+        const timestamp = new Date().toISOString().split('T')[0];
+        const filename = `conversations_export_${timestamp}.json`;
+
+        // Collect selected conversations
+        const toExport = {};
+        this.selectedConversations.forEach(id => {
+            if (this.conversations[id]) {
+                toExport[id] = this.conversations[id];
+            }
+        });
+
+        // Export as JSON
+        const content = JSON.stringify(toExport, null, 2);
+        this.downloadFile(content, filename, 'application/json');
+
+        this.showNotification(`${count} conversation(s) exported`, 'success');
+    }
+
+    /**
+     * Bulk delete conversations
+     */
+    async bulkDelete() {
+        if (this.selectedConversations.size === 0) return;
+
+        const count = this.selectedConversations.size;
+        if (!confirm(`Delete ${count} conversation(s)? This cannot be undone.`)) {
+            return;
+        }
+
+        // Delete all selected conversations
+        for (const id of this.selectedConversations) {
+            delete this.conversations[id];
+
+            // Delete from storage manager
+            try {
+                await this.storageManager.deleteConversation(id);
+            } catch (error) {
+                console.error(`Failed to delete conversation ${id} from storage:`, error);
+            }
+        }
+
+        // If current conversation was deleted, load another one
+        if (this.selectedConversations.has(this.currentConversationId)) {
+            const conversationIds = Object.keys(this.conversations);
+            if (conversationIds.length > 0) {
+                this.loadConversation(conversationIds[0]);
+            } else {
+                this.createNewConversation();
+            }
+        }
+
+        this.renderFolders();
+        this.exitBulkMode();
+
+        this.showNotification(`${count} conversation(s) deleted`, 'success');
     }
 
     scrollToBottom() {

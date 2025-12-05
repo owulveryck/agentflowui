@@ -84,7 +84,37 @@
             <div class="menu-section">
                 <div class="conversations-header">
                     <h3>Conversations</h3>
-                    <span id="conversation-count" class="conversation-count">0</span>
+                    <div class="conversations-header-actions">
+                        <span id="conversation-count" class="conversation-count">0</span>
+                        <button id="enable-bulk-mode-btn" class="icon-btn-small" title="Select conversations">
+                            <span class="material-icons">checklist</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bulk Actions Toolbar -->
+                <div id="bulk-actions-toolbar" class="bulk-actions-toolbar hidden">
+                    <div class="bulk-actions-info">
+                        <input type="checkbox" id="select-all-conversations" class="bulk-checkbox">
+                        <span id="bulk-selection-count">0 selected</span>
+                    </div>
+                    <div class="bulk-actions-buttons">
+                        <button id="bulk-move-btn" class="icon-btn-small" title="Move to folder">
+                            <span class="material-icons">drive_file_move</span>
+                        </button>
+                        <button id="bulk-tag-btn" class="icon-btn-small" title="Add tag">
+                            <span class="material-icons">label</span>
+                        </button>
+                        <button id="bulk-export-btn" class="icon-btn-small" title="Export">
+                            <span class="material-icons">download</span>
+                        </button>
+                        <button id="bulk-delete-btn" class="icon-btn-small" title="Delete">
+                            <span class="material-icons">delete</span>
+                        </button>
+                        <button id="cancel-bulk-btn" class="icon-btn-small" title="Cancel">
+                            <span class="material-icons">close</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Folders -->
