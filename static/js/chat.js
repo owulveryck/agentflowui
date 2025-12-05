@@ -461,6 +461,10 @@ class ChatUI {
         this.templatesList = document.getElementById('templates-list');
         this.saveTemplateBtn = document.getElementById('save-template-btn');
         this.manageTemplatesBtn = document.getElementById('manage-templates-btn');
+
+        // Character/Token counter
+        this.charCountValue = document.getElementById('char-count-value');
+        this.tokenCountValue = document.getElementById('token-count-value');
     }
 
     /**
@@ -1000,6 +1004,14 @@ class ChatUI {
 
         // Load templates from localStorage
         this.loadTemplates();
+
+        // Character/Token counter update
+        this.userInput.addEventListener('input', () => {
+            this.updateCharTokenCounter();
+        });
+
+        // Initialize counter
+        this.updateCharTokenCounter();
     }
 
     /**
@@ -4310,6 +4322,21 @@ class ChatUI {
             this.renderTemplates();
             this.showNotification(`Template "${template.name}" deleted`, 'success');
         }
+    }
+
+    /**
+     * Update character and token counter
+     */
+    updateCharTokenCounter() {
+        const text = this.userInput.value;
+        const charCount = text.length;
+
+        // Estimate tokens (rough approximation: 1 token ≈ 4 characters)
+        // This is a simplified estimate - actual tokenization varies by model
+        const estimatedTokens = Math.ceil(charCount / 4);
+
+        this.charCountValue.textContent = charCount.toLocaleString();
+        this.tokenCountValue.textContent = `~${estimatedTokens.toLocaleString()}`;
     }
 
     scrollToBottom() {

@@ -1812,6 +1812,37 @@ body {
     box-shadow: 0 0 0 3px var(--navy-10);
 }
 
+/* Character/Token Counter */
+.input-counter {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-xs) 0;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.counter-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.counter-item .material-icons {
+    font-size: 14px;
+    opacity: 0.7;
+}
+
+.counter-divider {
+    opacity: 0.5;
+}
+
+#char-count-value,
+#token-count-value {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
 /* ============================================
    Buttons
    ============================================ */
