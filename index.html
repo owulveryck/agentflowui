@@ -117,23 +117,35 @@
                     <!-- Audio Source Selection -->
                     <div class="dropdown-container">
                         <button id="audio-source-btn" class="btn btn-outline">
-                            <span class="material-icons">mic</span>
-                            <span>Microphone</span>
+                            <span class="material-icons" id="audio-source-icon">mic</span>
+                            <span id="audio-source-label">Microphone</span>
                             <span class="material-icons">arrow_drop_down</span>
                         </button>
-                        <div id="audio-source-dropdown" class="dropdown hidden">
+                        <div id="audio-source-dropdown" class="dropdown audio-source-dropdown hidden">
                             <div class="dropdown-list">
                                 <div class="dropdown-item audio-source-option selected" data-source="microphone">
-                                    <span class="material-icons">mic</span>
-                                    <span>Microphone Only</span>
+                                    <span class="material-icons audio-source-item-icon">mic</span>
+                                    <div class="audio-source-info">
+                                        <span class="audio-source-title">Microphone</span>
+                                        <span class="audio-source-desc">Capture your voice</span>
+                                    </div>
+                                    <span class="material-icons audio-source-check">check</span>
                                 </div>
                                 <div class="dropdown-item audio-source-option" data-source="system">
-                                    <span class="material-icons">desktop_windows</span>
-                                    <span>System Audio</span>
+                                    <span class="material-icons audio-source-item-icon">volume_up</span>
+                                    <div class="audio-source-info">
+                                        <span class="audio-source-title">System Audio</span>
+                                        <span class="audio-source-desc">Capture system sounds</span>
+                                    </div>
+                                    <span class="material-icons audio-source-check">check</span>
                                 </div>
                                 <div class="dropdown-item audio-source-option" data-source="mixed">
-                                    <span class="material-icons">settings_voice</span>
-                                    <span>Mic + System</span>
+                                    <span class="material-icons audio-source-item-icon">settings_voice</span>
+                                    <div class="audio-source-info">
+                                        <span class="audio-source-title">Mic + System</span>
+                                        <span class="audio-source-desc">Capture voice and sounds</span>
+                                    </div>
+                                    <span class="material-icons audio-source-check">check</span>
                                 </div>
                             </div>
                         </div>

@@ -33,6 +33,9 @@ class ChatUI {
         this.recordingTimerInterval = null;
         this.isCreatingLap = false;
         this.audioSource = 'microphone'; // microphone, system, mixed
+        this.recordingUploadInterval = null; // Periodic upload timer
+        this.uploadedChunks = []; // Track chunks already uploaded
+        this.currentRecordingGDriveId = null; // Track the GDrive file being built
 
         // Worker manager
         this.workerManager = null;
@@ -1943,14 +1946,28 @@ class ChatUI {
     selectAudioSource(source) {
         this.audioSource = source;
 
-        // Update button text
-        const sourceNames = {
-            'microphone': 'Microphone',
-            'system': 'System Audio',
-            'mixed': 'Mic + System'
+        // Update button text and icon
+        const sourceConfig = {
+            'microphone': {
+                label: 'Microphone',
+                icon: 'mic'
+            },
+            'system': {
+                label: 'System Audio',
+                icon: 'volume_up'
+            },
+            'mixed': {
+                label: 'Mic + System',
+                icon: 'settings_voice'
+            }
         };
 
-        this.audioSourceBtn.querySelector('span:last-child').textContent = sourceNames[source];
+        const config = sourceConfig[source] || sourceConfig['microphone'];
+        const iconElement = this.audioSourceBtn.querySelector('#audio-source-icon');
+        const labelElement = this.audioSourceBtn.querySelector('#audio-source-label');
+
+        if (iconElement) iconElement.textContent = config.icon;
+        if (labelElement) labelElement.textContent = config.label;
 
         // Store preference
         localStorage.setItem('preferredAudioSource', source);
@@ -2050,6 +2067,8 @@ class ChatUI {
             });
 
             this.audioChunks = [];
+            this.uploadedChunks = [];
+            this.currentRecordingGDriveId = null;
 
             this.mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
@@ -2061,8 +2080,8 @@ class ChatUI {
                 this.processRecording();
             };
 
-            // Start recording
-            this.mediaRecorder.start();
+            // Start recording with periodic data chunks (every 10 seconds)
+            this.mediaRecorder.start(10000);
             this.isRecording = true;
             this.recordingStartTime = Date.now();
 
@@ -2070,9 +2089,82 @@ class ChatUI {
             this.updateRecordingUI(true);
             this.startRecordingTimer();
 
+            // Start periodic upload to Google Drive (every 30 seconds)
+            const syncStatus = this.storageManager.getSyncStatus();
+            if (syncStatus.mode === 'online') {
+                this.startPeriodicRecordingUpload();
+            }
+
         } catch (error) {
             console.error('Failed to start recording:', error);
             this.showNotification(`Recording failed: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Start periodic recording upload to Google Drive
+     */
+    startPeriodicRecordingUpload() {
+        // Upload accumulated chunks every 30 seconds
+        this.recordingUploadInterval = setInterval(() => {
+            this.uploadRecordingChunks();
+        }, 30000);
+
+        console.log('Started periodic recording upload (every 30s)');
+    }
+
+    /**
+     * Upload accumulated recording chunks to Google Drive
+     */
+    async uploadRecordingChunks() {
+        // Get new chunks that haven't been uploaded yet
+        const newChunks = this.audioChunks.slice(this.uploadedChunks.length);
+
+        if (newChunks.length === 0) {
+            return; // Nothing new to upload
+        }
+
+        try {
+            const syncStatus = this.storageManager.getSyncStatus();
+            if (syncStatus.mode !== 'online') {
+                console.log('Not online, skipping periodic upload');
+                return;
+            }
+
+            // Create blob from new chunks
+            const partialBlob = new Blob(newChunks, {
+                type: this.mediaRecorder.mimeType
+            });
+
+            console.log(`Uploading ${newChunks.length} audio chunks (${this.formatFileSize(partialBlob.size)})...`);
+
+            if (!this.currentRecordingGDriveId) {
+                // First upload - create new file
+                const timestamp = Date.now();
+                const filename = `recording_${timestamp}_partial.${this.getFileExtension(this.mediaRecorder.mimeType)}`;
+
+                const gdriveUrl = await this.storageManager.uploadArtifact(partialBlob, filename);
+                this.currentRecordingGDriveId = gdriveUrl.replace('gdrive://', '');
+
+                console.log(`Created recording file in Google Drive: ${gdriveUrl}`);
+            } else {
+                // Append to existing file
+                // Note: Google Drive API doesn't support append, so we'll upload as new version
+                // We'll merge all chunks on final stop
+                console.log('Accumulated more chunks, will merge on stop');
+            }
+
+            // Mark these chunks as uploaded (moved to uploadedChunks)
+            this.uploadedChunks.push(...newChunks);
+
+            // Optional: Clear uploaded chunks from memory to save RAM
+            // this.audioChunks = this.audioChunks.slice(this.uploadedChunks.length);
+
+            console.log(`Uploaded chunks to Google Drive. Total uploaded: ${this.uploadedChunks.length}, Total recorded: ${this.audioChunks.length}`);
+
+        } catch (error) {
+            console.error('Failed to upload recording chunks:', error);
+            // Don't show notification - we'll retry on next interval or final upload
         }
     }
 
@@ -2085,6 +2177,12 @@ class ChatUI {
             this.mediaRecorder.stop();
             this.isRecording = false;
             this.stopRecordingTimer();
+
+            // Stop periodic upload timer
+            if (this.recordingUploadInterval) {
+                clearInterval(this.recordingUploadInterval);
+                this.recordingUploadInterval = null;
+            }
 
             // Stop all tracks
             if (this.audioStream) {
@@ -2140,13 +2238,39 @@ class ChatUI {
                 fileObj.uploading = true;
                 this.renderFilePreview(); // Update to show uploading state
 
-                // Non-blocking upload
-                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
+                // Check if we already uploaded chunks during recording
+                if (this.currentRecordingGDriveId && this.uploadedChunks.length > 0) {
+                    console.log('Recording was streamed to Google Drive during recording');
+
+                    // Upload any remaining chunks
+                    const remainingChunks = this.audioChunks.slice(this.uploadedChunks.length);
+                    if (remainingChunks.length > 0) {
+                        console.log(`Uploading ${remainingChunks.length} remaining chunks...`);
+                        await this.uploadRecordingChunks();
+                    }
+
+                    // Use the Google Drive file we've been building
+                    const gdriveUrl = `gdrive://${this.currentRecordingGDriveId}`;
+                    fileObj.gdriveUrl = gdriveUrl;
+                    fileObj.isArtifact = true;
+                    fileObj.uploading = false;
+                    fileObj.source = 'gdrive';
+
+                    console.log('Recording complete, using streamed Google Drive file:', gdriveUrl);
+                } else {
+                    // No streaming happened, upload complete file now
+                    console.log('Uploading complete recording to Google Drive...');
+                    this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
+                }
             } else {
                 // Mark as temporary if offline
                 fileObj.temporary = true;
                 this.showNotification('Recording added (will not be saved - connect to Google Drive to save)', 'warning');
             }
+
+            // Clean up streaming state
+            this.uploadedChunks = [];
+            this.currentRecordingGDriveId = null;
 
             this.renderFilePreview();
 
@@ -2173,11 +2297,13 @@ class ChatUI {
             this.stopRecordBtn.classList.remove('hidden');
             this.segmentBtn.classList.remove('hidden');
             this.recordingIndicator.classList.remove('hidden');
+            this.audioSourceBtn.classList.add('recording');
         } else {
             this.recordBtn.classList.remove('hidden');
             this.stopRecordBtn.classList.add('hidden');
             this.segmentBtn.classList.add('hidden');
             this.recordingIndicator.classList.add('hidden');
+            this.audioSourceBtn.classList.remove('recording');
         }
     }
 

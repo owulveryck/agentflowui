@@ -621,6 +621,22 @@ body {
     word-wrap: break-word;
 }
 
+/* Ensure text is readable in all message types */
+.message-content p,
+.message-content span,
+.message-content div {
+    color: inherit;
+}
+
+.message-content a {
+    color: var(--turquoise);
+    text-decoration: underline;
+}
+
+.user-message .message-content a {
+    color: var(--turquoise-30);
+}
+
 /* Typing indicator animation */
 .typing-indicator {
     display: inline-flex;
@@ -664,12 +680,31 @@ body {
     font-size: 0.875em;
 }
 
+.assistant-message .message-content code {
+    color: var(--navy-blue);
+}
+
+.user-message .message-content code {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: var(--white);
+}
+
 .message-content pre {
     background-color: rgba(0, 0, 0, 0.05);
     padding: var(--spacing-md);
     border-radius: var(--radius-md);
     overflow-x: auto;
     margin: var(--spacing-sm) 0;
+}
+
+.assistant-message .message-content pre {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.user-message .message-content pre {
+    background-color: rgba(255, 255, 255, 0.15);
+    color: var(--white);
 }
 
 .message-content pre code {
@@ -960,6 +995,17 @@ body {
     border: 1px solid var(--border-color);
 }
 
+.assistant-message .code-block-container {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: var(--text-primary);
+}
+
+.user-message .code-block-container {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--white);
+}
+
 .code-block-header {
     display: flex;
     justify-content: space-between;
@@ -969,12 +1015,21 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
+.user-message .code-block-header {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-bottom-color: rgba(255, 255, 255, 0.2);
+}
+
 .code-language {
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+}
+
+.user-message .code-language {
+    color: var(--turquoise-30);
 }
 
 .code-copy-btn {
@@ -995,8 +1050,23 @@ body {
     color: var(--navy-blue);
 }
 
+.user-message .code-copy-btn {
+    color: var(--white);
+    opacity: 0.8;
+}
+
+.user-message .code-copy-btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: var(--white);
+    opacity: 1;
+}
+
 .code-copy-btn.copied {
     color: var(--success-color);
+}
+
+.user-message .code-copy-btn.copied {
+    color: var(--turquoise-30);
 }
 
 .code-copy-btn .material-icons {
@@ -1045,6 +1115,7 @@ body {
 .message-content td {
     padding: var(--spacing-sm) var(--spacing-md);
     border: 1px solid var(--border-color);
+    color: var(--text-primary);
 }
 
 .message-content tbody tr:nth-child(even) {
@@ -1055,6 +1126,34 @@ body {
     background-color: var(--navy-20);
 }
 
+/* Tables in user messages */
+.user-message .message-content table {
+    background-color: rgba(255, 255, 255, 0.95);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+.user-message .message-content thead {
+    background-color: rgba(0, 0, 0, 0.3);
+    color: var(--white);
+}
+
+.user-message .message-content th {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.user-message .message-content td {
+    border-color: rgba(0, 0, 0, 0.1);
+    color: var(--text-primary);
+}
+
+.user-message .message-content tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+.user-message .message-content tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
 /* ============================================
    Lists
    ============================================ */
@@ -1063,6 +1162,7 @@ body {
     margin: var(--spacing-sm) 0;
     padding-left: var(--spacing-xl);
     line-height: 1.7;
+    color: inherit;
 }
 
 .message-content ul {
@@ -1076,6 +1176,7 @@ body {
 .message-content li {
     margin: var(--spacing-xs) 0;
     padding-left: var(--spacing-xs);
+    color: inherit;
 }
 
 .message-content ul ul,
@@ -1112,6 +1213,7 @@ body {
     margin-bottom: var(--spacing-md);
     font-weight: 600;
     line-height: 1.3;
+    color: inherit;
 }
 
 .message-content h1 {
@@ -1497,6 +1599,92 @@ body {
 
 .dropdown-item .material-icons {
     font-size: 20px;
+}
+
+/* Audio Source Dropdown Enhancements */
+.audio-source-dropdown {
+    min-width: 280px;
+}
+
+.audio-source-option {
+    padding: var(--spacing-md);
+    align-items: flex-start;
+}
+
+.audio-source-item-icon {
+    color: var(--navy-blue);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.audio-source-option:hover .audio-source-item-icon {
+    color: var(--turquoise);
+}
+
+.audio-source-option.selected .audio-source-item-icon {
+    color: var(--white);
+}
+
+.audio-source-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.audio-source-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.audio-source-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+}
+
+.audio-source-option.selected .audio-source-title,
+.audio-source-option.selected .audio-source-desc {
+    color: var(--white);
+}
+
+.audio-source-option.selected .audio-source-desc {
+    color: var(--turquoise-30);
+}
+
+.audio-source-check {
+    font-size: 20px;
+    color: var(--success-color);
+    opacity: 0;
+    flex-shrink: 0;
+}
+
+.audio-source-option.selected .audio-source-check {
+    opacity: 1;
+    color: var(--turquoise);
+}
+
+/* Audio Source Button Active State */
+#audio-source-btn.recording {
+    background-color: var(--error-color);
+    color: var(--white);
+    border-color: var(--error-color);
+    animation: pulse-recording 2s ease-in-out infinite;
+}
+
+#audio-source-btn.recording #audio-source-icon {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-recording {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+    }
 }
 
 /* ============================================
