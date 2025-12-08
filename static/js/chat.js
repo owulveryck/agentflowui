@@ -2860,21 +2860,28 @@ class ChatUI {
                 messageContent.push({ type: 'text', text: text });
             }
 
-            // Add files - use local dataURL immediately, track pending uploads
+            // Add files - download from Google Drive on-demand for memory efficiency
             for (const file of this.selectedFiles) {
-                // Always use local dataURL (available immediately)
-                let dataURL = file.dataURL;
-                let gdriveUrl = file.gdriveUrl || null; // Use gdrive URL if upload completed
+                let dataURL = file.dataURL; // May be null for memory-efficient mode
+                let gdriveUrl = file.gdriveUrl || null;
 
-                // If upload completed, download from Google Drive for better long-term storage
-                if (gdriveUrl) {
+                // Memory-efficient mode: Download from Google Drive on-demand
+                if (!dataURL && gdriveUrl) {
                     try {
+                        console.log('Downloading audio from Google Drive for API call...');
                         dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
                     } catch (error) {
-                        console.warn('Failed to download from Google Drive, using local data:', error);
-                        // Fall back to local dataURL
-                        gdriveUrl = null;
+                        console.error('Failed to download from Google Drive:', error);
+                        this.showNotification('Failed to load audio file - cannot send', 'error');
+                        continue; // Skip this file
                     }
+                }
+
+                // If still no dataURL, file is not available
+                if (!dataURL) {
+                    console.warn('File has no dataURL and no Google Drive URL:', file.fileName);
+                    this.showNotification(`Cannot send ${file.fileName} - file not available`, 'error');
+                    continue;
                 }
 
                 if (file.fileType.startsWith('image/')) {
@@ -3440,44 +3447,68 @@ class ChatUI {
             const duration = Date.now() - this.recordingStartTime;
             const filename = `recording_${Date.now()}.${this.getFileExtension(this.mediaRecorder.mimeType)}`;
 
-            // Show immediately with local data URL (non-blocking)
-            const dataURL = await this.blobToDataURL(audioBlob);
-
-            const fileObj = {
-                fileName: filename,
-                fileType: this.mediaRecorder.mimeType,
-                fileSize: audioBlob.size,
-                dataURL: dataURL,
-                isArtifact: false,
-                uploading: false
-            };
-
-            this.selectedFiles.push(fileObj);
-            this.renderFilePreview(); // Show immediately!
-
-            // Upload complete recording to Google Drive in background if online
-            // IMPORTANT: Always upload the complete audioBlob for API calls
-            // The partial streaming uploads are discarded - they were incomplete
+            // Memory-efficient approach: Upload immediately, don't store dataURL
             const syncStatus = this.storageManager.getSyncStatus();
-            if (syncStatus.mode === 'online') {
-                fileObj.uploading = true;
-                this.renderFilePreview(); // Update to show uploading state
 
-                // Discard partial streaming file if it exists (was incomplete)
-                if (this.currentRecordingGDriveId && this.uploadedChunks.length > 0) {
-                    console.log('Discarding incomplete streaming file, uploading complete recording instead');
-                    // TODO: Delete the incomplete partial file from Google Drive
-                    // The partial file will remain in Google Drive but won't be used
-                    // Filename pattern: recording_*_partial.*
+            if (syncStatus.mode === 'online') {
+                // ONLINE MODE: Upload to Google Drive immediately (blocking)
+                // This saves memory by not storing large base64 dataURLs
+                console.log('Uploading recording to Google Drive (memory-efficient mode)...');
+
+                const fileObj = {
+                    fileName: filename,
+                    fileType: this.mediaRecorder.mimeType,
+                    fileSize: audioBlob.size,
+                    // Don't store dataURL - will download from Google Drive when sending
+                    dataURL: null,
+                    isArtifact: false,
+                    uploading: true
+                };
+
+                this.selectedFiles.push(fileObj);
+                this.renderFilePreview(); // Show uploading state
+
+                try {
+                    // Upload immediately (blocking operation with progress)
+                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, filename);
+
+                    // Store Google Drive reference (tiny memory footprint)
+                    fileObj.gdriveUrl = gdriveUrl;
+                    fileObj.isArtifact = true;
+                    fileObj.uploading = false;
+                    fileObj.source = 'gdrive';
+
+                    console.log('Recording uploaded successfully:', gdriveUrl);
+                    this.showNotification('Recording saved to Google Drive', 'success');
+
+                } catch (error) {
+                    console.error('Failed to upload recording:', error);
+                    fileObj.uploading = false;
+                    fileObj.uploadError = true;
+                    fileObj.temporary = true;
+
+                    // Fallback: store dataURL in memory for offline use
+                    fileObj.dataURL = await this.blobToDataURL(audioBlob);
+                    this.showNotification('Upload failed - recording stored locally (memory warning)', 'warning');
                 }
 
-                // Always upload the COMPLETE audioBlob for proper API usage
-                console.log('Uploading complete recording to Google Drive...');
-                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
             } else {
-                // Mark as temporary if offline
-                fileObj.temporary = true;
-                this.showNotification('Recording added (will not be saved - connect to Google Drive to save)', 'warning');
+                // OFFLINE MODE: Must store dataURL in memory
+                console.log('Offline mode: storing recording in memory');
+                const dataURL = await this.blobToDataURL(audioBlob);
+
+                const fileObj = {
+                    fileName: filename,
+                    fileType: this.mediaRecorder.mimeType,
+                    fileSize: audioBlob.size,
+                    dataURL: dataURL,
+                    isArtifact: false,
+                    uploading: false,
+                    temporary: true
+                };
+
+                this.selectedFiles.push(fileObj);
+                this.showNotification('Recording stored locally (connect to Google Drive to save)', 'warning');
             }
 
             // Clean up streaming state
@@ -3679,34 +3710,74 @@ class ChatUI {
                     const isImage = file.type.startsWith('image/');
                     const isPDF = file.type === 'application/pdf';
 
-                    // Show immediately with local data URL (non-blocking)
-                    const dataURL = await this.fileToDataURL(file);
-
-                    const fileObj = {
-                        fileName: file.name,
-                        fileType: file.type,
-                        fileSize: file.size,
-                        dataURL: dataURL,
-                        isArtifact: false,
-                        uploading: false
-                    };
-
-                    this.selectedFiles.push(fileObj);
-                    this.renderFilePreview(); // Show immediately!
-
-                    // Upload to Google Drive in background if online
                     const syncStatus = this.storageManager.getSyncStatus();
-                    if (syncStatus.mode === 'online' && (isAudio || isImage || isPDF || file.size > this.FILE_SIZE_THRESHOLD)) {
-                        fileObj.uploading = true;
-                        this.renderFilePreview(); // Update to show uploading state
 
-                        // Non-blocking upload
-                        this.uploadToGoogleDriveInBackground(file, fileObj);
-                    } else if (isAudio || isImage) {
-                        // Mark as temporary if offline
-                        fileObj.temporary = true;
-                        const fileTypeLabel = isAudio ? 'Audio' : 'Image';
-                        this.showNotification(`${fileTypeLabel} added (will not be saved - connect to Google Drive to save)`, 'warning');
+                    // Memory-efficient mode for audio files when online
+                    if (isAudio && syncStatus.mode === 'online') {
+                        console.log('Uploading audio file to Google Drive (memory-efficient mode)...');
+
+                        const fileObj = {
+                            fileName: file.name,
+                            fileType: file.type,
+                            fileSize: file.size,
+                            dataURL: null, // Don't store in memory
+                            isArtifact: false,
+                            uploading: true
+                        };
+
+                        this.selectedFiles.push(fileObj);
+                        this.renderFilePreview(); // Show uploading state
+
+                        try {
+                            // Upload immediately (blocking)
+                            const gdriveUrl = await this.storageManager.uploadArtifact(file, file.name);
+                            fileObj.gdriveUrl = gdriveUrl;
+                            fileObj.isArtifact = true;
+                            fileObj.uploading = false;
+                            fileObj.source = 'gdrive';
+
+                            console.log('Audio file uploaded successfully:', gdriveUrl);
+                            this.showNotification('Audio saved to Google Drive', 'success');
+                            this.renderFilePreview();
+
+                        } catch (error) {
+                            console.error('Failed to upload audio:', error);
+                            fileObj.uploading = false;
+                            fileObj.uploadError = true;
+                            fileObj.temporary = true;
+                            // Fallback: store in memory
+                            fileObj.dataURL = await this.fileToDataURL(file);
+                            this.showNotification('Upload failed - audio stored locally (memory warning)', 'warning');
+                            this.renderFilePreview();
+                        }
+
+                    } else {
+                        // Standard mode for images, PDFs, and offline audio
+                        const dataURL = await this.fileToDataURL(file);
+
+                        const fileObj = {
+                            fileName: file.name,
+                            fileType: file.type,
+                            fileSize: file.size,
+                            dataURL: dataURL,
+                            isArtifact: false,
+                            uploading: false
+                        };
+
+                        this.selectedFiles.push(fileObj);
+                        this.renderFilePreview(); // Show immediately!
+
+                        // Upload to Google Drive in background if online
+                        if (syncStatus.mode === 'online' && (isImage || isPDF || file.size > this.FILE_SIZE_THRESHOLD)) {
+                            fileObj.uploading = true;
+                            this.renderFilePreview(); // Update to show uploading state
+                            this.uploadToGoogleDriveInBackground(file, fileObj);
+                        } else if (isAudio || isImage) {
+                            // Mark as temporary if offline
+                            fileObj.temporary = true;
+                            const fileTypeLabel = isAudio ? 'Audio' : 'Image';
+                            this.showNotification(`${fileTypeLabel} added (will not be saved - connect to Google Drive to save)`, 'warning');
+                        }
                     }
 
                 } catch (error) {
@@ -5820,8 +5891,20 @@ class ChatUI {
             // Create audio context and decode audio
             this.trimAudioContext = new (window.AudioContext || window.webkitAudioContext)();
 
+            // Get audio data - download from Google Drive if needed
+            let dataURL = file.dataURL;
+            if (!dataURL && file.gdriveUrl) {
+                console.log('Downloading audio from Google Drive for trimming...');
+                this.showNotification('Loading audio from Google Drive...', 'info');
+                dataURL = await this.storageManager.downloadArtifact(file.gdriveUrl);
+            }
+
+            if (!dataURL) {
+                throw new Error('Audio file not available');
+            }
+
             // Fetch and decode audio
-            const response = await fetch(file.dataURL);
+            const response = await fetch(dataURL);
             const arrayBuffer = await response.arrayBuffer();
             this.trimAudioBuffer = await this.trimAudioContext.decodeAudioData(arrayBuffer);
 
@@ -6046,32 +6129,54 @@ class ChatUI {
             // Convert trimmed buffer to blob
             const audioBlob = await this.audioBufferToBlob(trimmedBuffer);
 
-            // Convert to data URL
-            const dataURL = await this.blobToDataURL(audioBlob);
-
             // Update file in selectedFiles
             const file = this.selectedFiles[this.trimFileIndex];
-            file.dataURL = dataURL;
             file.fileSize = audioBlob.size;
             file.fileName = file.fileName.replace(/(\.[^.]+)$/, '_trimmed$1');
 
-            // If it was uploaded to Google Drive, we need to re-upload
-            if (file.isArtifact && file.gdriveUrl) {
+            // Memory-efficient: Upload immediately to Google Drive, don't store dataURL
+            const syncStatus = this.storageManager.getSyncStatus();
+            if (syncStatus.mode === 'online') {
+                console.log('Uploading trimmed audio to Google Drive (memory-efficient mode)...');
+                file.dataURL = null; // Clear any existing dataURL
                 file.isArtifact = false;
                 file.gdriveUrl = null;
                 file.uploading = true;
 
-                // Upload new trimmed version
-                const syncStatus = this.storageManager.getSyncStatus();
-                if (syncStatus.mode === 'online') {
-                    this.uploadToGoogleDriveInBackground(audioBlob, file);
+                this.renderFilePreview();
+                this.closeTrimModal();
+
+                try {
+                    // Upload immediately (blocking)
+                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, file.fileName);
+                    file.gdriveUrl = gdriveUrl;
+                    file.isArtifact = true;
+                    file.uploading = false;
+                    file.source = 'gdrive';
+
+                    console.log('Trimmed audio uploaded successfully:', gdriveUrl);
+                    this.showNotification('Trimmed audio saved to Google Drive', 'success');
+                    this.renderFilePreview();
+
+                } catch (error) {
+                    console.error('Failed to upload trimmed audio:', error);
+                    file.uploading = false;
+                    file.uploadError = true;
+                    file.temporary = true;
+                    // Fallback: store in memory
+                    file.dataURL = await this.blobToDataURL(audioBlob);
+                    this.showNotification('Upload failed - trimmed audio stored locally (memory warning)', 'warning');
+                    this.renderFilePreview();
                 }
+
+            } else {
+                // Offline: must store in memory
+                file.dataURL = await this.blobToDataURL(audioBlob);
+                file.temporary = true;
+                this.renderFilePreview();
+                this.closeTrimModal();
+                this.showNotification('Trimmed audio stored locally (connect to Google Drive to save)', 'warning');
             }
-
-            this.renderFilePreview();
-            this.closeTrimModal();
-
-            this.showNotification('Audio trimmed successfully', 'success');
 
         } catch (error) {
             console.error('Failed to trim audio:', error);
