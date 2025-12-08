@@ -3320,11 +3320,8 @@ class ChatUI {
             this.startRecordingTimer();
             this.startAudioVisualization();
 
-            // Start periodic upload to Google Drive (every 30 seconds)
-            const syncStatus = this.storageManager.getSyncStatus();
-            if (syncStatus.mode === 'online') {
-                this.startPeriodicRecordingUpload();
-            }
+            // Note: Periodic streaming upload disabled - we upload complete file when recording stops
+            // This ensures the API always receives the complete audio, not partial chunks
 
         } catch (error) {
             console.error('Failed to start recording:', error);
@@ -3410,12 +3407,6 @@ class ChatUI {
             this.stopRecordingTimer();
             this.stopAudioVisualization();
 
-            // Stop periodic upload timer
-            if (this.recordingUploadInterval) {
-                clearInterval(this.recordingUploadInterval);
-                this.recordingUploadInterval = null;
-            }
-
             // Stop all tracks
             if (this.audioStream) {
                 this.audioStream.getTracks().forEach(track => track.stop());
@@ -3464,36 +3455,25 @@ class ChatUI {
             this.selectedFiles.push(fileObj);
             this.renderFilePreview(); // Show immediately!
 
-            // Upload to Google Drive in background if online
+            // Upload complete recording to Google Drive in background if online
+            // IMPORTANT: Always upload the complete audioBlob for API calls
+            // The partial streaming uploads are discarded - they were incomplete
             const syncStatus = this.storageManager.getSyncStatus();
             if (syncStatus.mode === 'online') {
                 fileObj.uploading = true;
                 this.renderFilePreview(); // Update to show uploading state
 
-                // Check if we already uploaded chunks during recording
+                // Discard partial streaming file if it exists (was incomplete)
                 if (this.currentRecordingGDriveId && this.uploadedChunks.length > 0) {
-                    console.log('Recording was streamed to Google Drive during recording');
-
-                    // Upload any remaining chunks
-                    const remainingChunks = this.audioChunks.slice(this.uploadedChunks.length);
-                    if (remainingChunks.length > 0) {
-                        console.log(`Uploading ${remainingChunks.length} remaining chunks...`);
-                        await this.uploadRecordingChunks();
-                    }
-
-                    // Use the Google Drive file we've been building
-                    const gdriveUrl = `gdrive://${this.currentRecordingGDriveId}`;
-                    fileObj.gdriveUrl = gdriveUrl;
-                    fileObj.isArtifact = true;
-                    fileObj.uploading = false;
-                    fileObj.source = 'gdrive';
-
-                    console.log('Recording complete, using streamed Google Drive file:', gdriveUrl);
-                } else {
-                    // No streaming happened, upload complete file now
-                    console.log('Uploading complete recording to Google Drive...');
-                    this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
+                    console.log('Discarding incomplete streaming file, uploading complete recording instead');
+                    // TODO: Delete the incomplete partial file from Google Drive
+                    // The partial file will remain in Google Drive but won't be used
+                    // Filename pattern: recording_*_partial.*
                 }
+
+                // Always upload the COMPLETE audioBlob for proper API usage
+                console.log('Uploading complete recording to Google Drive...');
+                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
             } else {
                 // Mark as temporary if offline
                 fileObj.temporary = true;
