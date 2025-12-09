@@ -59,6 +59,8 @@ class ChatUI {
         this.FILE_SIZE_THRESHOLD = 25 * 1024; // 25KB
         this.AUDIO_SIZE_THRESHOLD = 500 * 1024; // 500KB
         this.AUDIO_DURATION_THRESHOLD = 30 * 1000; // 30 seconds
+        this.MAX_AUDIO_FILE_SIZE = 50 * 1024 * 1024; // 50MB - max size for base64 encoding to prevent browser crashes
+        this.GDRIVE_SIZE_THRESHOLD = 5 * 1024 * 1024; // 5MB - files >= this size use gdrive:// URLs, smaller use base64
     }
 
     /**
@@ -883,7 +885,13 @@ class ChatUI {
         // Save current conversation using StorageManager
         if (this.currentConversationId && this.conversations[this.currentConversationId]) {
             try {
-                await this.storageManager.saveConversation(this.conversations[this.currentConversationId]);
+                // Clean conversation before saving to remove large base64 data
+                const cleanedConversations = this.cleanConversationsForStorage({
+                    [this.currentConversationId]: this.conversations[this.currentConversationId]
+                });
+                const cleanedConversation = cleanedConversations[this.currentConversationId];
+
+                await this.storageManager.saveConversation(cleanedConversation);
                 this.storageQuotaExceeded = false;
                 this.consecutiveSaveFailures = 0;
             } catch (error) {
@@ -985,8 +993,9 @@ class ChatUI {
         this.systemPromptTextarea.value = this.systemPrompt;
         this.selectedFiles = [];
 
-        // Download and cache all Google Drive artifacts in this conversation
-        await this.cacheGoogleDriveArtifacts();
+        // Note: Google Drive artifacts are kept as gdrive:// URLs
+        // The backend will download them when processing the chat completion request
+        // await this.cacheGoogleDriveArtifacts(); // REMOVED: Backend handles gdrive:// URLs now
 
         this.renderMessages();
         this.renderConversationsList();
@@ -1924,20 +1933,10 @@ class ChatUI {
 
             // Add files - use local dataURL immediately, track pending uploads
             for (const file of this.selectedFiles) {
-                // Always use local dataURL (available immediately)
-                let dataURL = file.dataURL;
-                let gdriveUrl = file.gdriveUrl || null; // Use gdrive URL if upload completed
-
-                // If upload completed, download from Google Drive for better long-term storage
-                if (gdriveUrl) {
-                    try {
-                        dataURL = await this.storageManager.downloadArtifact(gdriveUrl);
-                    } catch (error) {
-                        console.warn('Failed to download from Google Drive, using local data:', error);
-                        // Fall back to local dataURL
-                        gdriveUrl = null;
-                    }
-                }
+                // For Google Drive files, use gdrive:// URL directly (no download needed)
+                // The backend will download from Google Drive when processing the chat request
+                let dataURL = file.gdriveUrl || file.dataURL;
+                let gdriveUrl = file.gdriveUrl || null;
 
                 if (file.fileType.startsWith('image/')) {
                     const imageData = {
@@ -2044,8 +2043,8 @@ class ChatUI {
                 });
             }
 
-            // Note: Google Drive artifacts are already cached as base64 in this.messages
-            // from cacheGoogleDriveArtifacts(), so no need to resolve them here
+            // Note: Google Drive artifacts are sent as gdrive:// URLs
+            // The backend will download and process them using the auth token from the header
 
             // Create assistant message placeholder with typing indicator
             const assistantMessage = {
@@ -2067,7 +2066,8 @@ class ChatUI {
             const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-Google-Drive-Token': localStorage.getItem('gd_access_token') || ''
                 },
                 body: JSON.stringify({
                     model: this.selectedModel,
@@ -2508,46 +2508,75 @@ class ChatUI {
                 type: this.mediaRecorder.mimeType
             });
 
+            // Clear audio chunks immediately to free memory
+            this.audioChunks = [];
+
             const duration = Date.now() - this.recordingStartTime;
             const filename = `recording_${Date.now()}.${this.getFileExtension(this.mediaRecorder.mimeType)}`;
 
-            // Show immediately with local data URL (non-blocking)
-            const dataURL = await this.blobToDataURL(audioBlob);
+            // Check file size and determine processing strategy
+            const fileSizeMB = audioBlob.size / 1024 / 1024;
+            const isLargeFile = audioBlob.size >= this.GDRIVE_SIZE_THRESHOLD;
+            console.log(`Audio recording size: ${fileSizeMB.toFixed(2)}MB, Large: ${isLargeFile}`);
+
+            let dataURL;
+            let gdriveUrl = null;
+            const syncStatus = this.storageManager.getSyncStatus();
+
+            // For large recordings (>= 5MB), upload to Google Drive first and use gdrive:// URL
+            if (isLargeFile && syncStatus.mode === 'online') {
+                console.log(`Large recording detected, uploading to Google Drive: ${filename}`);
+                this.showNotification(`Uploading large recording (${fileSizeMB.toFixed(2)}MB) to Google Drive...`, 'info');
+
+                try {
+                    gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, filename);
+                    dataURL = gdriveUrl; // Use gdrive:// URL directly
+                    console.log(`Recording uploaded to Google Drive: ${gdriveUrl}`);
+                    this.showNotification(`Recording uploaded successfully`, 'success');
+                } catch (uploadError) {
+                    console.error('Failed to upload recording to Google Drive:', uploadError);
+                    throw new Error(
+                        `Failed to upload large recording to Google Drive: ${uploadError.message}. ` +
+                        `Please check your connection and Google Drive permissions.`
+                    );
+                }
+            } else if (isLargeFile && syncStatus.mode !== 'online') {
+                // Large recording but offline - reject
+                throw new Error(
+                    `Recording too large (${fileSizeMB.toFixed(2)}MB) for offline mode. ` +
+                    `Please connect to Google Drive or record a shorter clip.`
+                );
+            } else {
+                // Small recording (< 5MB) - use base64 as before
+                try {
+                    dataURL = await this.blobToDataURL(audioBlob);
+                } catch (encodingError) {
+                    console.error('Failed to encode audio to base64:', encodingError);
+                    throw new Error(
+                        `Failed to encode audio file (${fileSizeMB.toFixed(2)}MB). ` +
+                        `The file may be too large for your browser to process. ` +
+                        `Try recording a shorter clip or refresh the page.`
+                    );
+                }
+            }
 
             const fileObj = {
                 fileName: filename,
                 fileType: this.mediaRecorder.mimeType,
                 fileSize: audioBlob.size,
                 dataURL: dataURL,
-                isArtifact: false,
-                uploading: false
+                gdriveUrl: gdriveUrl,
+                isArtifact: gdriveUrl ? true : false,
+                uploading: false,
+                source: gdriveUrl ? 'gdrive' : 'local'
             };
 
             this.selectedFiles.push(fileObj);
-            this.renderFilePreview(); // Show immediately!
-
-            // Upload to Google Drive in background if online
-            const syncStatus = this.storageManager.getSyncStatus();
-            if (syncStatus.mode === 'online') {
-                fileObj.uploading = true;
-                this.renderFilePreview(); // Update to show uploading state
-
-                // ALWAYS upload the COMPLETE recording to Google Drive
-                // The periodic uploads during recording were just for backup/streaming
-                // We need to upload the complete audio blob with all chunks merged
-                console.log('Uploading complete recording to Google Drive (all chunks)...');
-                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
-            } else {
-                // Mark as temporary if offline
-                fileObj.temporary = true;
-                this.showNotification('Recording added (will not be saved - connect to Google Drive to save)', 'warning');
-            }
+            this.renderFilePreview();
 
             // Clean up streaming state
             this.uploadedChunks = [];
             this.currentRecordingGDriveId = null;
-
-            this.renderFilePreview();
 
             // If this was a lap, start new recording
             if (this.isCreatingLap) {
@@ -2742,35 +2771,64 @@ class ChatUI {
                     const isImage = file.type.startsWith('image/');
                     const isPDF = file.type === 'application/pdf';
 
-                    // Show immediately with local data URL (non-blocking)
-                    const dataURL = await this.fileToDataURL(file);
+                    const fileSizeMB = file.size / 1024 / 1024;
+                    const isLargeFile = file.size >= this.GDRIVE_SIZE_THRESHOLD;
+
+                    console.log(`File: ${file.name}, Size: ${fileSizeMB.toFixed(2)}MB, Large: ${isLargeFile}`);
+
+                    let dataURL;
+                    let gdriveUrl = null;
+                    const syncStatus = this.storageManager.getSyncStatus();
+
+                    // For large files (>= 5MB), upload to Google Drive first and use gdrive:// URL
+                    if (isLargeFile && syncStatus.mode === 'online') {
+                        console.log(`Large file detected, uploading to Google Drive: ${file.name}`);
+                        this.showNotification(`Uploading large file (${fileSizeMB.toFixed(2)}MB) to Google Drive...`, 'info');
+
+                        try {
+                            gdriveUrl = await this.storageManager.uploadArtifact(file, file.name);
+                            dataURL = gdriveUrl; // Use gdrive:// URL directly
+                            console.log(`File uploaded to Google Drive: ${gdriveUrl}`);
+                            this.showNotification(`File uploaded successfully`, 'success');
+                        } catch (uploadError) {
+                            console.error('Failed to upload to Google Drive:', uploadError);
+                            throw new Error(
+                                `Failed to upload large file to Google Drive: ${uploadError.message}. ` +
+                                `Please check your connection and Google Drive permissions.`
+                            );
+                        }
+                    } else if (isLargeFile && syncStatus.mode !== 'online') {
+                        // Large file but offline - reject
+                        throw new Error(
+                            `File too large (${fileSizeMB.toFixed(2)}MB) for offline mode. ` +
+                            `Please connect to Google Drive to upload large files.`
+                        );
+                    } else {
+                        // Small file (< 5MB) - use base64 as before
+                        try {
+                            dataURL = await this.fileToDataURL(file);
+                        } catch (encodingError) {
+                            console.error('Failed to encode file to base64:', encodingError);
+                            throw new Error(
+                                `Failed to encode ${file.name} (${fileSizeMB.toFixed(2)}MB). ` +
+                                `The file may be too large for your browser to process.`
+                            );
+                        }
+                    }
 
                     const fileObj = {
                         fileName: file.name,
                         fileType: file.type,
                         fileSize: file.size,
                         dataURL: dataURL,
-                        isArtifact: false,
-                        uploading: false
+                        gdriveUrl: gdriveUrl,
+                        isArtifact: gdriveUrl ? true : false,
+                        uploading: false,
+                        source: gdriveUrl ? 'gdrive' : 'local'
                     };
 
                     this.selectedFiles.push(fileObj);
-                    this.renderFilePreview(); // Show immediately!
-
-                    // Upload to Google Drive in background if online
-                    const syncStatus = this.storageManager.getSyncStatus();
-                    if (syncStatus.mode === 'online' && (isAudio || isImage || isPDF || file.size > this.FILE_SIZE_THRESHOLD)) {
-                        fileObj.uploading = true;
-                        this.renderFilePreview(); // Update to show uploading state
-
-                        // Non-blocking upload
-                        this.uploadToGoogleDriveInBackground(file, fileObj);
-                    } else if (isAudio || isImage) {
-                        // Mark as temporary if offline
-                        fileObj.temporary = true;
-                        const fileTypeLabel = isAudio ? 'Audio' : 'Image';
-                        this.showNotification(`${fileTypeLabel} added (will not be saved - connect to Google Drive to save)`, 'warning');
-                    }
+                    this.renderFilePreview();
 
                 } catch (error) {
                     console.error('File processing error:', error);

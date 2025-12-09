@@ -7,7 +7,18 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "WebSearch",
-      "Bash(gh:*)"
+      "Bash(gh:*)",
+      "Bash(go mod:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(find:*)",
+      "Bash(go build:*)",
+      "Bash(curl:*)",
+      "Bash(PORT=8081 ./agentflowui-backend:*)",
+      "Bash(ls:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(printenv)"
     ],
     "deny": [],
     "ask": []
