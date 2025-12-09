@@ -2532,30 +2532,11 @@ class ChatUI {
                 fileObj.uploading = true;
                 this.renderFilePreview(); // Update to show uploading state
 
-                // Check if we already uploaded chunks during recording
-                if (this.currentRecordingGDriveId && this.uploadedChunks.length > 0) {
-                    console.log('Recording was streamed to Google Drive during recording');
-
-                    // Upload any remaining chunks
-                    const remainingChunks = this.audioChunks.slice(this.uploadedChunks.length);
-                    if (remainingChunks.length > 0) {
-                        console.log(`Uploading ${remainingChunks.length} remaining chunks...`);
-                        await this.uploadRecordingChunks();
-                    }
-
-                    // Use the Google Drive file we've been building
-                    const gdriveUrl = `gdrive://${this.currentRecordingGDriveId}`;
-                    fileObj.gdriveUrl = gdriveUrl;
-                    fileObj.isArtifact = true;
-                    fileObj.uploading = false;
-                    fileObj.source = 'gdrive';
-
-                    console.log('Recording complete, using streamed Google Drive file:', gdriveUrl);
-                } else {
-                    // No streaming happened, upload complete file now
-                    console.log('Uploading complete recording to Google Drive...');
-                    this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
-                }
+                // ALWAYS upload the COMPLETE recording to Google Drive
+                // The periodic uploads during recording were just for backup/streaming
+                // We need to upload the complete audio blob with all chunks merged
+                console.log('Uploading complete recording to Google Drive (all chunks)...');
+                this.uploadToGoogleDriveInBackground(audioBlob, fileObj);
             } else {
                 // Mark as temporary if offline
                 fileObj.temporary = true;
