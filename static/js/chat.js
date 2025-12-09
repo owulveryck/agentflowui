@@ -3378,7 +3378,7 @@ class ChatUI {
                 const timestamp = Date.now();
                 const filename = `recording_${timestamp}_partial.${this.getFileExtension(this.mediaRecorder.mimeType)}`;
 
-                const gdriveUrl = await this.storageManager.uploadArtifact(partialBlob, filename);
+                const gdriveUrl = await this.storageManager.uploadArtifact(partialBlob, filename, this.currentConversationId);
                 this.currentRecordingGDriveId = gdriveUrl.replace('gdrive://', '');
 
                 console.log(`Created recording file in Google Drive: ${gdriveUrl}`);
@@ -3470,7 +3470,7 @@ class ChatUI {
 
                 try {
                     // Upload immediately (blocking operation with progress)
-                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, filename);
+                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, filename, this.currentConversationId);
 
                     // Store Google Drive reference (tiny memory footprint)
                     fileObj.gdriveUrl = gdriveUrl;
@@ -3730,7 +3730,7 @@ class ChatUI {
 
                         try {
                             // Upload immediately (blocking)
-                            const gdriveUrl = await this.storageManager.uploadArtifact(file, file.name);
+                            const gdriveUrl = await this.storageManager.uploadArtifact(file, file.name, this.currentConversationId);
                             fileObj.gdriveUrl = gdriveUrl;
                             fileObj.isArtifact = true;
                             fileObj.uploading = false;
@@ -3795,7 +3795,7 @@ class ChatUI {
         try {
             // Handle both File and Blob objects
             const filename = file.name || fileObj.fileName;
-            const gdriveUrl = await this.storageManager.uploadArtifact(file, filename);
+            const gdriveUrl = await this.storageManager.uploadArtifact(file, filename, this.currentConversationId);
 
             // Update file object with Google Drive URL
             fileObj.gdriveUrl = gdriveUrl;
@@ -6148,7 +6148,7 @@ class ChatUI {
 
                 try {
                     // Upload immediately (blocking)
-                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, file.fileName);
+                    const gdriveUrl = await this.storageManager.uploadArtifact(audioBlob, file.fileName, this.currentConversationId);
                     file.gdriveUrl = gdriveUrl;
                     file.isArtifact = true;
                     file.uploading = false;

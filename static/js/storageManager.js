@@ -409,10 +409,10 @@ class StorageManager {
     /**
      * Upload artifact to Google Drive
      */
-    async uploadArtifact(blob, fileName) {
+    async uploadArtifact(blob, fileName, conversationId = null) {
         if (this.syncMode === 'online') {
             try {
-                return await this.googleDrive.uploadArtifact(blob, fileName);
+                return await this.googleDrive.uploadArtifact(blob, fileName, conversationId);
             } catch (error) {
                 console.error('Failed to upload artifact to Google Drive:', error);
                 throw error;

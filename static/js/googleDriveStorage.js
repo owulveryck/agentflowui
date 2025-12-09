@@ -211,16 +211,37 @@ class GoogleDriveStorage {
     }
 
     /**
-     * Upload an artifact (audio, image, etc.) to Google Drive
+     * Get or create conversation-specific artifact folder
+     * Extracts numeric ID from conversationId (e.g., conv_1765271889759 -> 1765271889759)
      */
-    async uploadArtifact(blob, fileName) {
+    async getConversationArtifactFolder(conversationId) {
+        if (!conversationId) {
+            // If no conversation ID provided, use root artifacts folder
+            return this.artifactsFolderId;
+        }
+
+        // Extract numeric ID from conversation ID (e.g., conv_1765271889759 -> 1765271889759)
+        const numericId = conversationId.replace(/^conv_/, '');
+
+        // Create/get subfolder within artifacts folder
+        return await this.getOrCreateFolder(numericId, this.artifactsFolderId);
+    }
+
+    /**
+     * Upload an artifact (audio, image, etc.) to Google Drive
+     * Organizes artifacts in subfolders by conversation ID
+     */
+    async uploadArtifact(blob, fileName, conversationId = null) {
         await this.init();
 
         const token = await this.auth.getAccessToken();
         if (!token) throw new Error('No access token');
 
-        // Check if file already exists (by name)
-        const existingFile = await this.findFile(fileName, this.artifactsFolderId);
+        // Get conversation-specific artifact folder
+        const targetFolderId = await this.getConversationArtifactFolder(conversationId);
+
+        // Check if file already exists (by name) in the target folder
+        const existingFile = await this.findFile(fileName, targetFolderId);
 
         if (existingFile) {
             // Return existing file ID
@@ -230,7 +251,7 @@ class GoogleDriveStorage {
         // Create metadata
         const metadata = {
             name: fileName,
-            parents: [this.artifactsFolderId]
+            parents: [targetFolderId]
         };
 
         // Use multipart upload
